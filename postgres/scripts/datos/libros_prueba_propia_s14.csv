@@ -1,0 +1,9 @@
+isbn,titulo,autor,categoria,anio_publicacion,ejemplares_disponibles
+9789999999991,Libro de prueba S14,Autor de Prueba S14,Prueba S14,2026,2
+9780000000101,La vorágine,José Eustasio Rivera,Novela,1924,2
+9780000000102,María,Jorge Isaacs,Novela,1867,3
+9780000000103,El coronel no tiene quien le escriba,Gabriel García Márquez,Novela,1961,2
+9780000000104,Delirio,Laura Restrepo,Novela,2004,1
+9780000000101,La vorágine (repetida en el archivo),José Eustasio Rivera,Novela,1924,1
+978000000010,Libro con ISBN de 12 dígitos,Autor de Prueba,Novela,2001,1
+9780000000105,Libro del futuro,Autor de Prueba,Novela,2150,1
