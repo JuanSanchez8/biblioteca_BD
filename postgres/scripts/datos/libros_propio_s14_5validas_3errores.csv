@@ -1,0 +1,9 @@
+isbn,titulo,autor,categoria,anio_publicacion,ejemplares_disponibles
+9789999999901,Libro propio S14 uno,Autora propia uno,Ensayo propio,2022,2
+9789999999902,Libro propio S14 dos,Autor propio dos,Historia propia,2021,1
+9789999999903,Libro propio S14 tres,Autora propia tres,Ensayo propio,2020,3
+9789999999904,Libro propio S14 cuatro,Autor propio cuatro,Historia propia,2019,1
+9789999999905,Libro propio S14 cinco,Autora propia cinco,Ensayo propio,2018,2
+9789999999901,Duplicado dentro del CSV,Autora duplicada,Categoría duplicada,2024,1
+9789999999906,Libro con año futuro,Autor año futuro,Categoría año futuro,2201,1
+9789999999907,Libro con categoría extensa,Autor categoría extensa,Categoría propia para prueba demasiado extensa que supera sesenta caracteres,2024,1
