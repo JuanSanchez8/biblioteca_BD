@@ -1,6 +1,6 @@
-/**
-consulta #1
-**/
+-- -----------------------------------------
+-- Reporte 1: los 20 libros más prestados  
+-- -----------------------------------------
 WITH ranking AS (
     SELECT
         l.isbn,
@@ -25,9 +25,9 @@ ORDER BY
     total_prestamos DESC,
     titulo ASC;
 
-/**
-consulta #2
-**/
+-- -----------------------------------------
+-- Reporte 2: lectores que más libros han leído
+-- -----------------------------------------
 WITH prestamos_por_lector AS (
     SELECT
         p.id_lector,
@@ -53,9 +53,9 @@ WHERE u.rol = 'lector'
   AND pl.total_libros_leidos = m.mayor_cantidad
 ORDER BY u.nombres, u.apellidos;
 
-/**
-consulta #3
-**/
+-- -----------------------------------------
+-- Reporte 3: lectores morosos
+-- -----------------------------------------
 SELECT
     u.id_usuario,
     u.nombres,
@@ -73,10 +73,9 @@ WHERE u.rol = 'lector'
   )
 ORDER BY u.apellidos, u.nombres;
 
-
-/**
-consulta #4
-**/
+-- -----------------------------------------
+-- Reporte 4: préstamos en mora con datos del lector
+-- -----------------------------------------
 SELECT
     p.id_lector,
     u.nombres,
@@ -97,4 +96,4 @@ WHERE p.fecha_devolucion IS NULL
 ORDER BY
     u.apellidos,
     u.nombres,
-    p.fecha_vencimiento;    
+    p.fecha_vencimiento;
