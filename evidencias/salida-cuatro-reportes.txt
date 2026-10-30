@@ -1,0 +1,141 @@
+﻿-- -----------------------------------------
+-- Reporte 1: los 20 libros más prestados  
+-- -----------------------------------------
+WITH ranking AS (
+    SELECT
+        l.isbn,
+        l.titulo,
+        COUNT(p.isbn) AS total_prestamos
+    FROM biblioteca.libros l
+    LEFT JOIN biblioteca.prestamos p
+        ON p.isbn = l.isbn
+    GROUP BY
+        l.isbn,
+        l.titulo
+    ORDER BY
+        total_prestamos DESC
+    FETCH FIRST 20 ROWS WITH TIES
+)
+SELECT
+    isbn,
+    titulo,
+    total_prestamos
+FROM ranking
+ORDER BY
+    total_prestamos DESC,
+    titulo ASC;
+     isbn      |               titulo                | total_prestamos 
+---------------+-------------------------------------+-----------------
+ 9780000000014 | 1984                                |               3
+ 9780000000019 | Alicia en el país de las maravillas |               3
+ 9780000000020 | Breve historia del tiempo           |               3
+ 9780000000001 | Cien años de soledad                |               3
+ 9780000000011 | Como agua para chocolate            |               3
+ 9780000000021 | Cosmos                              |               3
+ 9780000000026 | Crimen y castigo                    |               3
+ 9780000000003 | Crónica de una muerte anunciada     |               3
+ 9780000000009 | Don Quijote de la Mancha            |               3
+ 9780000000029 | Drácula                             |               3
+ 9780000000008 | El Aleph                            |               3
+ 9780000000002 | El amor en los tiempos del cólera   |               3
+ 9780000000031 | El nombre del viento                |               3
+ 9780000000023 | El origen de las especies           |               3
+ 9780000000017 | El principito                       |               3
+ 9780000000012 | El túnel                            |               3
+ 9780000000016 | Fahrenheit 451                      |               3
+ 9780000000007 | Ficciones                           |               3
+ 9780000000030 | Frankenstein                        |               3
+ 9780000000032 | Harry Potter y la piedra filosofal  |               2
+ 9780000000006 | La casa de los espíritus            |               2
+(21 rows)
+
+
+-- -----------------------------------------
+-- Reporte 2: lectores que más libros han leído
+-- -----------------------------------------
+WITH prestamos_por_lector AS (
+    SELECT
+        p.id_lector,
+        COUNT(*) AS total_libros_leidos
+    FROM biblioteca.prestamos p
+    WHERE p.fecha_devolucion IS NOT NULL
+    GROUP BY p.id_lector
+),
+maximo AS (
+    SELECT MAX(total_libros_leidos) AS mayor_cantidad
+    FROM prestamos_por_lector
+)
+SELECT
+    u.id_usuario,
+    u.nombres,
+    u.apellidos,
+    pl.total_libros_leidos
+FROM prestamos_por_lector pl
+JOIN biblioteca.usuarios u
+    ON u.id_usuario = pl.id_lector
+CROSS JOIN maximo m
+WHERE u.rol = 'lector'
+  AND pl.total_libros_leidos = m.mayor_cantidad
+ORDER BY u.nombres, u.apellidos;
+ id_usuario | nombres  |    apellidos    | total_libros_leidos 
+------------+----------+-----------------+---------------------
+          1 | Mariana  | Gómez Rojas     |                  21
+          2 | Santiago | Rodríguez Pérez |                  21
+(2 rows)
+
+
+-- -----------------------------------------
+-- Reporte 3: lectores morosos
+-- -----------------------------------------
+SELECT
+    u.id_usuario,
+    u.nombres,
+    u.apellidos,
+    u.correo,
+    u.telefono
+FROM biblioteca.usuarios u
+WHERE u.rol = 'lector'
+  AND EXISTS (
+      SELECT 1
+      FROM biblioteca.prestamos p
+      WHERE p.id_lector = u.id_usuario
+        AND p.fecha_devolucion IS NULL
+        AND p.fecha_vencimiento < CURRENT_DATE
+  )
+ORDER BY u.apellidos, u.nombres;
+ id_usuario |  nombres   |   apellidos   |               correo                |  telefono  
+------------+------------+---------------+-------------------------------------+------------
+          4 | Juan David | Martínez Ruiz | juan.martinez@correo-ejemplo.edu.co | 3001000004
+(1 row)
+
+
+-- -----------------------------------------
+-- Reporte 4: préstamos en mora con datos del lector
+-- -----------------------------------------
+SELECT
+    p.id_lector,
+    u.nombres,
+    u.apellidos,
+    u.correo,
+    u.telefono,
+    p.isbn,
+    l.titulo,
+    p.fecha_hora_prestamo,
+    p.fecha_vencimiento
+FROM biblioteca.prestamos p
+JOIN biblioteca.usuarios u
+    ON u.id_usuario = p.id_lector
+JOIN biblioteca.libros l
+    ON l.isbn = p.isbn
+WHERE p.fecha_devolucion IS NULL
+  AND p.fecha_vencimiento < CURRENT_DATE
+ORDER BY
+    u.apellidos,
+    u.nombres,
+    p.fecha_vencimiento;
+ id_lector |  nombres   |   apellidos   |               correo                |  telefono  |     isbn      |       titulo        | fecha_hora_prestamo | fecha_vencimiento 
+-----------+------------+---------------+-------------------------------------+------------+---------------+---------------------+---------------------+-------------------
+         4 | Juan David | Martínez Ruiz | juan.martinez@correo-ejemplo.edu.co | 3001000004 | 9780000000018 | Matilda             | 2026-09-30 10:00:00 | 2026-10-14
+         4 | Juan David | Martínez Ruiz | juan.martinez@correo-ejemplo.edu.co | 3001000004 | 9780000000028 | Orgullo y prejuicio | 2026-10-05 11:00:00 | 2026-10-19
+(2 rows)
+
