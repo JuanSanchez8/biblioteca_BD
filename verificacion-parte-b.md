@@ -2,13 +2,13 @@
 
 **Base de datos:** `curso`  
 **Esquema:** `biblioteca`  
-**Archivo:** `postgres/scripts/reportes.sql`
+**Archivos:** `postgres/scripts/datos-prueba.sql` y `postgres/scripts/reportes.sql`
 
 ## Tabla de verificación
 
 | Caso | Resultado esperado | Resultado obtenido | Corrección realizada |
 |:---|:---|:---|:---|
-| **1. Libro sin préstamos** | El libro debe conservarse con 0 préstamos, pero no entrar al top 20. | Se conserva mediante `LEFT JOIN`. Su conteo es 0 y no aparece en el top 20. | Se utilizó `LEFT JOIN` y `COUNT(p.isbn)` para contar únicamente préstamos existentes. |
+| **1. Libro sin préstamos** | El libro debe conservarse con 0 préstamos, pero no entrar al top 20. | La consulta adicional del fixture muestra `Rayuela` con 0. No entra al top 20 porque hay al menos 20 libros con préstamos. | Se utilizó `LEFT JOIN` y `COUNT(p.isbn)`; el fixture imprime un libro sin préstamos para hacer visible el cero. |
 | **2. Empate en el puesto 20** | Los dos libros empatados deben aparecer. | Se obtuvieron 21 filas: 19 libros con 3 préstamos y 2 con 2 préstamos. | Se eliminó el título del ordenamiento interno de `WITH TIES` y se dejó únicamente la cantidad de préstamos. |
 | **3. Empate entre lectores** | Deben aparecer todos los lectores con la cantidad máxima de libros leídos. | Mariana Gómez Rojas y Santiago Rodríguez Pérez aparecen con 21 libros cada uno. | Se calculó el máximo mediante una CTE y se conservaron todos los empates. |
 | **4. Lector con préstamos abiertos** | No debe aparecer entre los lectores que más libros han leído. | Juan David tiene 3 préstamos abiertos y 0 devueltos. No aparece en el Reporte 2. | Se agregó `fecha_devolucion IS NOT NULL`. |
@@ -26,3 +26,17 @@ Se verificó el tratamiento de los empates, los libros sin préstamos, los prés
 La principal corrección se realizó en el Reporte 1, donde se ajustó el ordenamiento interno para que `WITH TIES` incluyera todos los libros empatados en el último puesto.
 
 También se estableció que un préstamo se considera moroso cuando no ha sido devuelto y su fecha de vencimiento es anterior a `CURRENT_DATE`.
+
+## Nota sobre el bibliotecario de prueba
+
+Cada préstamo requiere un bibliotecario válido por una clave foránea. Para que `datos-prueba.sql` pueda ejecutarse en una base recién cargada, el fixture crea el bibliotecario de prueba si aún no existe y obtiene su `id_usuario` para registrar los préstamos. Así no depende de que su ID sea siempre 21.
+
+Durante la preparación se comprobó manualmente la carga de usuarios con esta consulta:
+
+```sql
+SELECT id_usuario, rol, documento
+FROM biblioteca.usuarios
+ORDER BY id_usuario;
+```
+
+En esa ejecución, los lectores tenían IDs del 1 al 20 y el bibliotecario de prueba tenía el ID 21. Esta consulta sirve para inspeccionar los usuarios; no es necesario agregarla al fixture ni ejecutarla antes de cada prueba.

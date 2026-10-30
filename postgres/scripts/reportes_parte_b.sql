@@ -1,6 +1,9 @@
--- -----------------------------------------
--- Reporte 1: los 20 libros más prestados  
--- -----------------------------------------
+-- Reporte 1: los 20 libros más prestados.
+-- LEFT JOIN conserva libros sin préstamos (conteo 0); no entran al top 20
+-- si hay al menos 20 libros con préstamos. WITH TIES incluye el empate
+-- completo en el puesto 20. Con datos-prueba.sql se esperan 21 filas:
+-- 19 libros con 3 préstamos y 2 empatados con 2.
+\echo '== Reporte 1: los 20 libros más prestados (incluye empates) =='
 WITH ranking AS (
     SELECT
         l.isbn,
@@ -25,9 +28,10 @@ ORDER BY
     total_prestamos DESC,
     titulo ASC;
 
--- -----------------------------------------
--- Reporte 2: lectores que más libros han leído
--- -----------------------------------------
+-- Reporte 2: todos los lectores empatados con el máximo de préstamos devueltos.
+-- Los préstamos abiertos no cuentan. Con datos-prueba.sql se esperan
+-- Mariana Gómez Rojas y Santiago Rodríguez Pérez, con 21 cada uno.
+\echo '== Reporte 2: lectores con más libros devueltos =='
 WITH prestamos_por_lector AS (
     SELECT
         p.id_lector,
@@ -53,9 +57,10 @@ WHERE u.rol = 'lector'
   AND pl.total_libros_leidos = m.mayor_cantidad
 ORDER BY u.nombres, u.apellidos;
 
--- -----------------------------------------
--- Reporte 3: lectores morosos
--- -----------------------------------------
+-- Reporte 3: cada lector con al menos un préstamo abierto vencido aparece
+-- una sola vez. La mora usa fecha_vencimiento < CURRENT_DATE; vencer hoy
+-- no cuenta. Con datos-prueba.sql se espera una fila: Juan David.
+\echo '== Reporte 3: lectores morosos (una fila por lector) =='
 SELECT
     u.id_usuario,
     u.nombres,
@@ -73,9 +78,10 @@ WHERE u.rol = 'lector'
   )
 ORDER BY u.apellidos, u.nombres;
 
--- -----------------------------------------
--- Reporte 4: préstamos en mora con datos del lector
--- -----------------------------------------
+-- Reporte 4: una fila por préstamo abierto vencido, con contacto del lector.
+-- Usa la misma regla estricta (< CURRENT_DATE), por lo que vencer hoy no
+-- cuenta. Con datos-prueba.sql se esperan los dos préstamos de Juan David.
+\echo '== Reporte 4: préstamos en mora para notificación =='
 SELECT
     p.id_lector,
     u.nombres,

@@ -3,12 +3,41 @@
 -- Base de datos: curso | Esquema: biblioteca
 -- Script repetible: reemplaza solo los préstamos que él mismo registra.
 -- Las columnas rol_lector y rol_bibliotecario son GENERATED ALWAYS.
--- Bibliotecario reservado para estas pruebas: id_usuario = 21.
+-- Crea o reutiliza el bibliotecario de pruebas, sin asumir su ID.
 -- Fechas relativas a CURRENT_DATE.
 -- ============================================================
 
 \set ON_ERROR_STOP on
 BEGIN;
+
+INSERT INTO biblioteca.usuarios (
+    documento, nombres, apellidos, correo, rol
+)
+VALUES (
+    '9000000001', 'Bibliotecario', 'Pruebas',
+    'bibliotecario.pruebas@curso.edu.co', 'bibliotecario'
+)
+ON CONFLICT DO NOTHING;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM biblioteca.usuarios
+        WHERE documento = '9000000001'
+          AND rol = 'bibliotecario'
+    ) THEN
+        RAISE EXCEPTION
+            'No existe un bibliotecario de pruebas válido con documento 9000000001';
+    END IF;
+END;
+$$;
+
+SELECT id_usuario AS id_bibliotecario
+FROM biblioteca.usuarios
+WHERE documento = '9000000001'
+  AND rol = 'bibliotecario'
+\gset
 
 CREATE TABLE IF NOT EXISTS biblioteca.s16_control_prestamos_prueba (
     id_lector integer NOT NULL,
@@ -53,7 +82,7 @@ devueltos AS (
         1 AS id_ejemplar,
         (CURRENT_DATE - r.dias_antes)::timestamp + TIME '09:00'
             AS fecha_hora_prestamo,
-        21 AS id_bibliotecario,
+        :id_bibliotecario AS id_bibliotecario,
         CURRENT_DATE - r.dias_antes + 14 AS fecha_vencimiento,
         (
             CURRENT_DATE - r.dias_antes
@@ -74,19 +103,19 @@ abiertos AS (
         1 AS id_ejemplar,
         (CURRENT_DATE - 30)::timestamp + TIME '10:00'
             AS fecha_hora_prestamo,
-        21 AS id_bibliotecario,
+        :id_bibliotecario AS id_bibliotecario,
         CURRENT_DATE - 16 AS fecha_vencimiento,
         NULL::date AS fecha_devolucion
     UNION ALL
     SELECT
         4, '9780000000028'::varchar, 1,
         (CURRENT_DATE - 25)::timestamp + TIME '11:00',
-        21, CURRENT_DATE - 11, NULL::date
+        :id_bibliotecario, CURRENT_DATE - 11, NULL::date
     UNION ALL
     SELECT
         4, '9780000000027'::varchar, 1,
         (CURRENT_DATE - 14)::timestamp + TIME '12:00',
-        21, CURRENT_DATE, NULL::date
+        :id_bibliotecario, CURRENT_DATE, NULL::date
 )
 SELECT * FROM devueltos
 UNION ALL
@@ -214,3 +243,17 @@ LEFT JOIN biblioteca.prestamos p
    )
 GROUP BY l.isbn, l.titulo
 ORDER BY total_prestamos DESC, l.titulo;
+
+-- Caso 1: hacer visible que un libro sin préstamos queda con conteo cero;
+-- no aparece en el top 20 cuando hay al menos 20 libros prestados.
+SELECT
+    l.isbn,
+    l.titulo,
+    COUNT(p.isbn) AS total_prestamos
+FROM biblioteca.libros l
+LEFT JOIN biblioteca.prestamos p
+    ON p.isbn = l.isbn
+GROUP BY l.isbn, l.titulo
+HAVING COUNT(p.isbn) = 0
+ORDER BY l.isbn
+LIMIT 1;
