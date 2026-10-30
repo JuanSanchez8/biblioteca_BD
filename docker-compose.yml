@@ -1,7 +1,8 @@
 services:
   postgres:
     image: postgres:16
-    container_name: postgres_curso
+    #container_name: postgres_curso
+    container_name: biblioteca_bd_postgres_curso
     environment:
       POSTGRES_USER: curso
       POSTGRES_PASSWORD: curso
