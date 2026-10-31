@@ -10,6 +10,8 @@
 \set ON_ERROR_STOP on
 BEGIN;
 
+
+
 INSERT INTO biblioteca.usuarios (
     documento, nombres, apellidos, correo, rol
 )
