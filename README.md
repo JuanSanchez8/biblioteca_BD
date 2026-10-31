@@ -24,14 +24,14 @@ docker-compose.yml                 Entorno: PostgreSQL 16 + pgAdmin
 ├── entregas/
 │   └── S16/parte-a.sql                     Las 11 consultas de la parte A de S16
 ├── evidencias/                             Salidas de psql de las cargas y de los reportes
-└──verificacion-parte-b.md                  Tabla de verificación de los reportes (S16)
+└── verificacion-parte-b.md                  Tabla de verificación de los reportes (S16)
 ```
 
 ---
 
 ## 1. Levantar el entorno
 
-Requisitos: tener el Docker Desktop abierto.
+Requisitos: tener Docker Desktop abierto.
 
 Desde la carpeta del proyecto, ejecuta:
 
@@ -84,9 +84,9 @@ Cada comando muestra un resumen con la cantidad de libros o lectores cargados y 
 Los resultados de cada comando apareceran al final de cada ejecucion con el siguiente formato:
 
 ```
- cargados | filas_rechazadas 
-----------+------------------
-        # |                #
+ x_cargados | filas_rechazadas 
+------------+------------------
+          # |                #
 ```
 
 Repetir una carga no duplica datos: las filas que ya existen se rechazan.
