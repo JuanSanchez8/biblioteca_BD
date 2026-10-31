@@ -2,51 +2,62 @@
 
 Sistema de biblioteca del proyecto integrador. Este repositorio contiene el entorno Docker, el esquema en PostgreSQL, la carga masiva desde CSV y las consultas de los reportes.
 
+***
+
 ## Estructura
 
 ```
 docker-compose.yml                 Entorno: PostgreSQL 16 + pgAdmin
-postgres/
-  init/                            Se ejecuta solo, una vez, cuando la base se crea vacía
-    01_esquema.sql                 Esquema de negocio "biblioteca"
-    02_carga.sql                   Esquema "carga" con las tablas de paso (stg_*)
-  scripts/                         Dentro del contenedor: /scripts
-    S14-carga-libros-biblioteca.sql
-    S14-carga-lectores-biblioteca.sql
-    datos-prueba.sql               Préstamos de prueba para los reportes (S16)
-    reportes.sql                   Los 4 reportes del proyecto (S16)
-    S16-tienda.sql                 Esquema de práctica de la parte A de S16
-    datos/                         CSV semilla del curso y CSV propios
-docs/
-  mapeo-y-criterios.md             Mapeo CSV → esquema y criterios de error (S14)
-entregas/
-  S16/parte-a.sql                  Las 11 consultas de la parte A de S16
-evidencias/                        Salidas de psql de las cargas y de los reportes
-verificacion-parte-b.md            Tabla de verificación de los reportes (S16)
+├── postgres/
+│   ├── init/                               Se ejecuta solo, una vez, cuando la base se crea vacía
+│   │   ├── 01_esquema.sql                  Esquema de negocio "biblioteca"
+│   │   └── 02_carga.sql                    Esquema "carga" con las tablas de paso (stg_*)
+│   └── scripts/                            Dentro del contenedor: /scripts
+│       ├── S14-carga-libros-biblioteca.sql
+│       ├── S14-carga-lectores-biblioteca.sql
+│       ├── datos-prueba.sql                Préstamos de prueba para los reportes (S16)
+│       ├── reportes.sql                    Los 4 reportes del proyecto (S16)
+│       ├── S16-tienda.sql                  Esquema de práctica de la parte A de S16
+│       └── datos/                          CSV semilla del curso y CSV propios
+├── docs/
+│   └── mapeo-y-criterios.md                Mapeo CSV → esquema y criterios de error (S14)
+├── entregas/
+│   └── S16/parte-a.sql                     Las 11 consultas de la parte A de S16
+├── evidencias/                             Salidas de psql de las cargas y de los reportes
+└──verificacion-parte-b.md                  Tabla de verificación de los reportes (S16)
 ```
+
+---
 
 ## 1. Levantar el entorno
 
-Requisitos: Docker Desktop abierto.
+Requisitos: tener el Docker Desktop abierto.
+
+Desde la carpeta del proyecto, ejecuta:
 
 ```
 docker compose up -d postgres pgadmin
 docker compose logs postgres
 ```
 
-En los logs deben aparecer `01_esquema.sql` y `02_carga.sql` sin errores.
+La primera vez que se levanta el proyecto, si el volumen de PostgreSQL está vacío, PostgreSQL crea la base y ejecuta los scripts de postgres/init/. En los logs deben aparecer `01_esquema.sql` y `02_carga.sql` sin errores.
+
+Si el proyecto ya se había iniciado antes y el volumen conserva la base de datos, PostgreSQL no vuelve a ejecutar esos scripts. En su lugar, aparecerá el mensaje "Skipping initialization".  
 
 - **pgAdmin:** http://localhost:5050 (usuario `admin@curso.com`, contraseña `curso`). Registrar el servidor con host `postgres`, puerto `5432`, base `curso`, usuario y contraseña `curso`.
 - **Desde fuera de Docker** (VS Code, DBeaver), PostgreSQL queda en `localhost:5433`.
 
-**Si cambia algo en `postgres/init/`**, hay que recrear la base para que vuelva a ejecutarse (borra los datos):
+**Si cambia algo en `postgres/init/`**
+Los scripts de esa carpeta solo se ejecutan cuando PostgreSQL inicializa una base en un volumen vacío. Para que vuelvan a ejecutarse, hay que borrar el volumen de datos de PostgreSQL y levantar el entorno otra vez. Esto elimina los datos guardados en esa base, así que hazlo solo si necesitas reiniciarla.
 
 ```
 docker compose down
-docker volume ls                     # buscar el volumen que termina en pg_curso_data
+docker volume ls                        # buscar el volumen que termina en pg_curso_data, se eliminara con rm
 docker volume rm <nombre_del_volumen>
-docker compose up -d postgres pgadmin
+docker compose up -d postgres pgadmin   # se vuelve a levantar el proyecto
 ```
+
+***
 
 ## 2. Cargar libros y lectores desde CSV
 
@@ -54,14 +65,30 @@ El orden importa: los lectores semilla deben quedar con `id_usuario` del 1 al 20
 
 ```
 docker compose exec postgres psql -U curso -d curso -P pager=off -v archivo=/scripts/datos/libros_semilla.csv -f /scripts/S14-carga-libros-biblioteca.sql
+
 docker compose exec postgres psql -U curso -d curso -P pager=off -v archivo=/scripts/datos/libros_semilla_con_errores.csv -f /scripts/S14-carga-libros-biblioteca.sql
+
 docker compose exec postgres psql -U curso -d curso -P pager=off -v archivo=/scripts/datos/libros_prueba_propia_s14.csv -f /scripts/S14-carga-libros-biblioteca.sql
+
 docker compose exec postgres psql -U curso -d curso -P pager=off -v archivo=/scripts/datos/lectores_semilla.csv -f /scripts/S14-carga-lectores-biblioteca.sql
+
 docker compose exec postgres psql -U curso -d curso -P pager=off -v archivo=/scripts/datos/lectores_semilla_con_errores.csv -f /scripts/S14-carga-lectores-biblioteca.sql
+
 docker compose exec postgres psql -U curso -d curso -P pager=off -v archivo=/scripts/datos/lectores_prueba_propia_s14.csv -f /scripts/S14-carga-lectores-biblioteca.sql
 ```
 
-Resultado esperado (cargadas / rechazadas): libros 32/0, 0/8, 5/3; lectores 20/0, 0/6, 5/3.
+
+Ejecute los comandos en el orden indicado. Ejecutelos linea por linea.
+Cada comando muestra un resumen con la cantidad de libros o lectores cargados y las filas rechazadas. Los resultados esperados para una base recién inicializada son: libros 32/0, 0/8 y 5/3; lectores 20/0, 0/6 y 5/3.
+
+Los resultados de cada comando apareceran al final de cada ejecucion con el siguiente formato:
+
+```
+ cargados | filas_rechazadas 
+----------+------------------
+        # |                #
+```
+
 Repetir una carga no duplica datos: las filas que ya existen se rechazan.
 
 Las filas rechazadas quedan en la bitácora:
@@ -71,6 +98,8 @@ docker compose exec postgres psql -U curso -d curso -P pager=off -c "SELECT arch
 ```
 
 Los criterios de validación están en `docs/mapeo-y-criterios.md`.
+
+***
 
 ## 3. Datos de prueba y reportes
 
