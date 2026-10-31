@@ -1,0 +1,294 @@
+Salida de psql de las cargas del Laboratorio S14 (base recreada desde cero).
+Orden: libros limpio, libros con errores, libros limpio repetido, libros propio,
+lectores limpio, lectores con errores, lectores propio y bitácora final.
+Los números se volvieron a comprobar después de mover las tablas de paso al esquema carga.
+
+PS C:\Users\kiner\OneDrive\Escritorio\entorno_docker> Start-Sleep -Seconds 10
+PS C:\Users\kiner\OneDrive\Escritorio\entorno_docker>
+PS C:\Users\kiner\OneDrive\Escritorio\entorno_docker> docker compose exec postgres psql -U curso -d curso -P pager=off -v archivo=/scripts/datos/libros_semilla.csv -f /scripts/S14-carga-libros-biblioteca.sql
+BEGIN
+psql:/scripts/S14-carga-libros-biblioteca.sql:20: NOTICE:  relation "rechazo_carga" already exists, skipping
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+COPY 33
+DELETE 1
+INSERT 0 32
+UPDATE 32
+UPDATE 0
+INSERT 0 9
+INSERT 0 29
+INSERT 0 32
+INSERT 0 94
+INSERT 0 0
+ libros_cargados | filas_rechazadas
+-----------------+------------------
+              32 |                0
+(1 row)
+
+ linea | motivo | contenido
+-------+--------+-----------
+(0 rows)
+
+COMMIT
+PS C:\Users\kiner\OneDrive\Escritorio\entorno_docker> docker compose exec postgres psql -U curso -d curso -P pager=off -v archivo=/scripts/datos/libros_semilla_con_errores.csv -f /scripts/S14-carga-libros-biblioteca.sql
+BEGIN
+psql:/scripts/S14-carga-libros-biblioteca.sql:20: NOTICE:  relation "rechazo_carga" already exists, skipping
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+COPY 9
+DELETE 1
+INSERT 0 8
+UPDATE 8
+UPDATE 0
+INSERT 0 0
+INSERT 0 0
+INSERT 0 0
+INSERT 0 0
+INSERT 0 8
+ libros_cargados | filas_rechazadas
+-----------------+------------------
+               0 |                8
+(1 row)
+
+ linea |              motivo              |                                          contenido
+-------+----------------------------------+---------------------------------------------------------------------------------------------
+     2 | isbn ya existe en el catálogo    | 9780000000001,Cien años de soledad (edición duplicada),Gabriel García Márquez,Novela,1967,2
+     3 | título vacío                     | 9780000000033,,Julio Cortázar,Novela,1963,3
+     4 | año no numérico                  | 9780000000034,Relato sin ejemplares numéricos,Autor de Prueba,Novela,dos,3
+     5 | año no numérico                  | 9780000000035,Relato con año inválido,Autor de Prueba,Novela,MCMXLIX,2
+     6 | tiene 7 columnas, se esperaban 6 | 9780000000036,Relato con columna de más,Autor de Prueba,Novela,1999,2,columna_sobrante
+     7 | autor vacío                      | 9780000000037,Relato sin autor,,Novela,2005,1
+     8 | isbn vacío                       | ,Relato sin ISBN,Autor de Prueba,Novela,2010,1
+     9 | ejemplares negativo              | 9780000000038,Relato con ejemplares negativos,Autor de Prueba,Novela,2015,-3
+(8 rows)
+
+COMMIT
+PS C:\Users\kiner\OneDrive\Escritorio\entorno_docker> docker compose exec postgres psql -U curso -d curso -P pager=off -v archivo=/scripts/datos/libros_semilla.csv -f /scripts/S14-carga-libros-biblioteca.sql
+BEGIN
+psql:/scripts/S14-carga-libros-biblioteca.sql:20: NOTICE:  relation "rechazo_carga" already exists, skipping
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+COPY 33
+DELETE 1
+INSERT 0 32
+UPDATE 32
+UPDATE 0
+INSERT 0 0
+INSERT 0 0
+INSERT 0 0
+INSERT 0 0
+INSERT 0 32
+ libros_cargados | filas_rechazadas
+-----------------+------------------
+               0 |               32
+(1 row)
+
+ linea |            motivo             |                                        contenido
+-------+-------------------------------+------------------------------------------------------------------------------------------
+     2 | isbn ya existe en el catálogo | 9780000000001,Cien años de soledad,Gabriel García Márquez,Novela,1967,4
+     3 | isbn ya existe en el catálogo | 9780000000002,El amor en los tiempos del cólera,Gabriel García Márquez,Novela,1985,3
+     4 | isbn ya existe en el catálogo | 9780000000003,Crónica de una muerte anunciada,Gabriel García Márquez,Novela,1981,2
+     5 | isbn ya existe en el catálogo | 9780000000004,Rayuela,Julio Cortázar,Novela,1963,3
+     6 | isbn ya existe en el catálogo | 9780000000005,Pedro Páramo,Juan Rulfo,Novela,1955,2
+     7 | isbn ya existe en el catálogo | 9780000000006,La casa de los espíritus,Isabel Allende,Novela,1982,3
+     8 | isbn ya existe en el catálogo | 9780000000007,Ficciones,Jorge Luis Borges,Cuento,1944,2
+     9 | isbn ya existe en el catálogo | 9780000000008,El Aleph,Jorge Luis Borges,Cuento,1949,2
+    10 | isbn ya existe en el catálogo | 9780000000009,Don Quijote de la Mancha,Miguel de Cervantes,Novela,1605,5
+    11 | isbn ya existe en el catálogo | 9780000000010,La sombra del viento,Carlos Ruiz Zafón,Novela,2001,4
+    12 | isbn ya existe en el catálogo | 9780000000011,Como agua para chocolate,Laura Esquivel,Novela,1989,2
+    13 | isbn ya existe en el catálogo | 9780000000012,El túnel,Ernesto Sábato,Novela,1948,2
+    14 | isbn ya existe en el catálogo | 9780000000013,Los detectives salvajes,Roberto Bolaño,Novela,1998,2
+    15 | isbn ya existe en el catálogo | 9780000000014,1984,George Orwell,Ciencia Ficción,1949,6
+    16 | isbn ya existe en el catálogo | 9780000000015,Un mundo feliz,Aldous Huxley,Ciencia Ficción,1932,3
+    17 | isbn ya existe en el catálogo | 9780000000016,Fahrenheit 451,Ray Bradbury,Ciencia Ficción,1953,3
+    18 | isbn ya existe en el catálogo | 9780000000017,El principito,Antoine de Saint-Exupéry,Infantil,1943,5
+    19 | isbn ya existe en el catálogo | 9780000000018,Matilda,Roald Dahl,Infantil,1988,3
+    20 | isbn ya existe en el catálogo | 9780000000019,Alicia en el país de las maravillas,Lewis Carroll,Infantil,1865,3
+    21 | isbn ya existe en el catálogo | 9780000000020,Breve historia del tiempo,Stephen Hawking,Ciencia,1988,2
+    22 | isbn ya existe en el catálogo | 9780000000021,Cosmos,Carl Sagan,Ciencia,1980,2
+    23 | isbn ya existe en el catálogo | 9780000000022,Sapiens: de animales a dioses,Yuval Noah Harari,Historia,2011,4
+    24 | isbn ya existe en el catálogo | 9780000000023,El origen de las especies,Charles Darwin,Ciencia,1859,1
+    25 | isbn ya existe en el catálogo | 9780000000024,Veinte poemas de amor y una canción desesperada,Pablo Neruda,Poesía,1924,3
+    26 | isbn ya existe en el catálogo | 9780000000025,Trilce,César Vallejo,Poesía,1922,1
+    27 | isbn ya existe en el catálogo | 9780000000026,Crimen y castigo,Fiódor Dostoievski,Novela,1866,3
+    28 | isbn ya existe en el catálogo | 9780000000027,Los miserables,Victor Hugo,Novela,1862,2
+    29 | isbn ya existe en el catálogo | 9780000000028,Orgullo y prejuicio,Jane Austen,Novela,1813,3
+    30 | isbn ya existe en el catálogo | 9780000000029,Drácula,Bram Stoker,Terror,1897,2
+    31 | isbn ya existe en el catálogo | 9780000000030,Frankenstein,Mary Shelley,Terror,1818,2
+    32 | isbn ya existe en el catálogo | 9780000000031,El nombre del viento,Patrick Rothfuss,Fantasía,2007,4
+    33 | isbn ya existe en el catálogo | 9780000000032,Harry Potter y la piedra filosofal,J.K. Rowling,Fantasía,1997,6
+(32 rows)
+
+COMMIT
+PS C:\Users\kiner\OneDrive\Escritorio\entorno_docker> docker compose exec postgres psql -U curso -d curso -P pager=off -v archivo=/scripts/datos/libros_prueba_propia_s14.csv -f /scripts/S14-carga-libros-biblioteca.sql
+BEGIN
+psql:/scripts/S14-carga-libros-biblioteca.sql:20: NOTICE:  relation "rechazo_carga" already exists, skipping
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+COPY 9
+DELETE 1
+INSERT 0 8
+UPDATE 8
+UPDATE 1
+INSERT 0 1
+INSERT 0 4
+INSERT 0 5
+INSERT 0 10
+INSERT 0 3
+ libros_cargados | filas_rechazadas
+-----------------+------------------
+               5 |                3
+(1 row)
+
+ linea |                  motivo                   |                                       contenido
+-------+-------------------------------------------+---------------------------------------------------------------------------------------
+     7 | isbn repetido en el archivo (línea 3)     | 9780000000101,La vorágine (repetida en el archivo),José Eustasio Rivera,Novela,1924,1
+     8 | isbn no tiene 10 o 13 dígitos             | 978000000010,Libro con ISBN de 12 dígitos,Autor de Prueba,Novela,2001,1
+     9 | año fuera del rango permitido (1000-2100) | 9780000000105,Libro del futuro,Autor de Prueba,Novela,2150,1
+(3 rows)
+
+COMMIT
+PS C:\Users\kiner\OneDrive\Escritorio\entorno_docker> docker compose exec postgres psql -U curso -d curso -P pager=off -v archivo=/scripts/datos/lectores_semilla.csv -f /scripts/S14-carga-lectores-biblioteca.sql
+BEGIN
+psql:/scripts/S14-carga-lectores-biblioteca.sql:19: NOTICE:  relation "rechazo_carga" already exists, skipping
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+COPY 21
+DELETE 1
+INSERT 0 20
+UPDATE 20
+UPDATE 0
+UPDATE 0
+INSERT 0 20
+INSERT 0 0
+ lectores_cargados | filas_rechazadas
+-------------------+------------------
+                20 |                0
+(1 row)
+
+ linea | motivo | contenido
+-------+--------+-----------
+(0 rows)
+
+COMMIT
+PS C:\Users\kiner\OneDrive\Escritorio\entorno_docker> docker compose exec postgres psql -U curso -d curso -P pager=off -v archivo=/scripts/datos/lectores_semilla_con_errores.csv -f /scripts/S14-carga-lectores-biblioteca.sql
+BEGIN
+psql:/scripts/S14-carga-lectores-biblioteca.sql:19: NOTICE:  relation "rechazo_carga" already exists, skipping
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+COPY 7
+DELETE 1
+INSERT 0 6
+UPDATE 6
+UPDATE 0
+UPDATE 0
+INSERT 0 0
+INSERT 0 6
+ lectores_cargados | filas_rechazadas
+-------------------+------------------
+                 0 |                6
+(1 row)
+
+ linea |                   motivo                    |                                         contenido
+-------+---------------------------------------------+-------------------------------------------------------------------------------------------
+     2 | documento ya registrado                     | 1000000001,Mariana,Gómez Rojas (duplicado),mariana.gomez@correo-ejemplo.edu.co,3001000001
+     3 | correo vacío                                | 1000000021,Carlos,Peña Londoño,,3001000021
+     4 | correo mal formado                          | 1000000022,Diana,Salgado Cuervo,diana.salgado-arroba-correo-ejemplo.edu.co,3001000022
+     5 | teléfono no numérico o de longitud inválida | 1000000023,Jorge,Restrepo Vélez,jorge.restrepo@correo-ejemplo.edu.co,tres-cero-cero
+     6 | documento vacío                             | ,Sin Documento,Prueba Prueba,sin.documento@correo-ejemplo.edu.co,3001000024
+     7 | nombres vacío                               | 1000000025,,Sin Nombre,sin.nombre@correo-ejemplo.edu.co,3001000025
+(6 rows)
+
+COMMIT
+PS C:\Users\kiner\OneDrive\Escritorio\entorno_docker> docker compose exec postgres psql -U curso -d curso -P pager=off -v archivo=/scripts/datos/lectores_prueba_propia_s14.csv -f /scripts/S14-carga-lectores-biblioteca.sql
+BEGIN
+psql:/scripts/S14-carga-lectores-biblioteca.sql:19: NOTICE:  relation "rechazo_carga" already exists, skipping
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+COPY 9
+DELETE 1
+INSERT 0 8
+UPDATE 8
+UPDATE 0
+UPDATE 1
+INSERT 0 5
+INSERT 0 3
+ lectores_cargados | filas_rechazadas
+-------------------+------------------
+                 5 |                3
+(1 row)
+
+ linea |                    motivo                    |                          contenido
+-------+----------------------------------------------+--------------------------------------------------------------
+     7 | correo repetido en el archivo (línea 3)      | 1000000105,Laura,Pérez,Valentina.Ortiz@Correo.com,3145678901
+     8 | documento no numérico o de longitud inválida | 10000A0106,Diego,Gómez,diego.gomez@correo.com,3156789012
+     9 | correo mal formado                           | 1000000107,Lucía,Herrera,lucia.herrera@correo,3167890123
+(3 rows)
+
+COMMIT
+PS C:\Users\kiner\OneDrive\Escritorio\entorno_docker>
+PS C:\Users\kiner\OneDrive\Escritorio\entorno_docker> docker compose exec postgres psql -U curso -d curso -P pager=off -c "SELECT archivo, linea, motivo FROM biblioteca.rechazo_carga ORDER BY archivo, linea;"
+                     archivo                     | linea |                    motivo
+-------------------------------------------------+-------+----------------------------------------------
+ /scripts/datos/lectores_prueba_propia_s14.csv   |     7 | correo repetido en el archivo (línea 3)
+ /scripts/datos/lectores_prueba_propia_s14.csv   |     8 | documento no numérico o de longitud inválida
+ /scripts/datos/lectores_prueba_propia_s14.csv   |     9 | correo mal formado
+ /scripts/datos/lectores_semilla_con_errores.csv |     2 | documento ya registrado
+ /scripts/datos/lectores_semilla_con_errores.csv |     3 | correo vacío
+ /scripts/datos/lectores_semilla_con_errores.csv |     4 | correo mal formado
+ /scripts/datos/lectores_semilla_con_errores.csv |     5 | teléfono no numérico o de longitud inválida
+ /scripts/datos/lectores_semilla_con_errores.csv |     6 | documento vacío
+ /scripts/datos/lectores_semilla_con_errores.csv |     7 | nombres vacío
+ /scripts/datos/libros_prueba_propia_s14.csv     |     7 | isbn repetido en el archivo (línea 3)
+ /scripts/datos/libros_prueba_propia_s14.csv     |     8 | isbn no tiene 10 o 13 dígitos
+ /scripts/datos/libros_prueba_propia_s14.csv     |     9 | año fuera del rango permitido (1000-2100)
+ /scripts/datos/libros_semilla_con_errores.csv   |     2 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla_con_errores.csv   |     3 | título vacío
+ /scripts/datos/libros_semilla_con_errores.csv   |     4 | año no numérico
+ /scripts/datos/libros_semilla_con_errores.csv   |     5 | año no numérico
+ /scripts/datos/libros_semilla_con_errores.csv   |     6 | tiene 7 columnas, se esperaban 6
+ /scripts/datos/libros_semilla_con_errores.csv   |     7 | autor vacío
+ /scripts/datos/libros_semilla_con_errores.csv   |     8 | isbn vacío
+ /scripts/datos/libros_semilla_con_errores.csv   |     9 | ejemplares negativo
+ /scripts/datos/libros_semilla.csv               |     2 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |     3 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |     4 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |     5 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |     6 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |     7 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |     8 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |     9 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |    10 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |    11 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |    12 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |    13 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |    14 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |    15 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |    16 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |    17 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |    18 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |    19 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |    20 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |    21 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |    22 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |    23 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |    24 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |    25 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |    26 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |    27 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |    28 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |    29 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |    30 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |    31 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |    32 | isbn ya existe en el catálogo
+ /scripts/datos/libros_semilla.csv               |    33 | isbn ya existe en el catálogo
+(52 rows)
+
+PS C:\Users\kiner\OneDrive\Escritorio\entorno_docker>
