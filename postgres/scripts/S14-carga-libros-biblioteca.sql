@@ -1,7 +1,7 @@
 -- S14. Carga de libros al esquema definitivo biblioteca.
 -- Convierte cada fila valida en libro, autor, categoria y ejemplares.
+-- Tablas de paso: esquema carga (postgres/init/02_carga.sql).
 -- Las filas rechazadas quedan en biblioteca.rechazo_carga.
--- Para elegir otro archivo, ejecutar psql con -v archivo=/scripts/datos/....
 \set ON_ERROR_STOP on
 \if :{?archivo}
 \else
@@ -10,37 +10,14 @@
 
 BEGIN;
 
-CREATE TABLE IF NOT EXISTS biblioteca.rechazo_carga (
-    id         integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    archivo    text        NOT NULL,
-    linea      integer     NOT NULL,
-    contenido  text        NOT NULL,
-    motivo     text        NOT NULL,
-    fecha      timestamptz NOT NULL DEFAULT now()
-);
+-- Las tablas de paso viven en el esquema "carga" (postgres/init/02_carga.sql).
+-- Se vacían al inicio para que cada carga empiece limpia y numere desde 1.
+TRUNCATE carga.stg_linea, carga.stg_libro RESTART IDENTITY;
 
-CREATE TEMP TABLE stg_linea (
-    n      integer GENERATED ALWAYS AS IDENTITY,
-    linea  text
-) ON COMMIT DROP;
+COPY carga.stg_linea (linea) FROM :'archivo' WITH (FORMAT text);
+DELETE FROM carga.stg_linea WHERE n = 1;
 
-CREATE TEMP TABLE stg_libro (
-    linea_csv               integer,
-    contenido               text,
-    num_campos              integer,
-    isbn                    text,
-    titulo                  text,
-    autor                   text,
-    categoria               text,
-    anio_publicacion        text,
-    ejemplares_disponibles  text,
-    motivo                  text
-) ON COMMIT DROP;
-
-COPY stg_linea (linea) FROM :'archivo' WITH (FORMAT text);
-DELETE FROM stg_linea WHERE n = 1;
-
-INSERT INTO stg_libro (
+INSERT INTO carga.stg_libro (
     linea_csv, contenido, num_campos, isbn, titulo, autor, categoria,
     anio_publicacion, ejemplares_disponibles
 )
@@ -52,9 +29,9 @@ SELECT n, linea,
        trim(split_part(linea, ',', 4)),
        trim(split_part(linea, ',', 5)),
        trim(split_part(linea, ',', 6))
-FROM stg_linea;
+FROM carga.stg_linea;
 
-UPDATE stg_libro SET motivo = CASE
+UPDATE carga.stg_libro SET motivo = CASE
     WHEN num_campos <> 6 THEN
         'tiene ' || num_campos || ' columnas, se esperaban 6'
     WHEN isbn = '' THEN 'isbn vacío'
@@ -76,15 +53,15 @@ UPDATE stg_libro SET motivo = CASE
     WHEN EXISTS (
         SELECT 1
         FROM biblioteca.libros l
-        WHERE l.isbn = stg_libro.isbn
+        WHERE l.isbn = carga.stg_libro.isbn
     ) THEN 'isbn ya existe en el catálogo'
 END;
 
-UPDATE stg_libro AS actual
+UPDATE carga.stg_libro AS actual
 SET motivo = 'isbn repetido en el archivo (línea ' || anterior.linea_csv || ')'
 FROM (
     SELECT isbn, min(linea_csv) AS linea_csv
-    FROM stg_libro
+    FROM carga.stg_libro
     WHERE motivo IS NULL
     GROUP BY isbn
     HAVING count(*) > 1
@@ -95,7 +72,7 @@ WHERE actual.motivo IS NULL
 
 INSERT INTO biblioteca.categorias (genero)
 SELECT DISTINCT categoria
-FROM stg_libro AS s
+FROM carga.stg_libro AS s
 WHERE s.motivo IS NULL
   AND NOT EXISTS (
       SELECT 1
@@ -106,7 +83,7 @@ ON CONFLICT (genero) DO NOTHING;
 
 INSERT INTO biblioteca.autor (nombre_autor)
 SELECT DISTINCT s.autor
-FROM stg_libro AS s
+FROM carga.stg_libro AS s
 WHERE s.motivo IS NULL
   AND NOT EXISTS (
       SELECT 1
@@ -119,14 +96,14 @@ INSERT INTO biblioteca.libros (
 )
 SELECT s.isbn, c.id_categoria, a.id_autor, s.titulo,
        NULLIF(s.anio_publicacion, '')::integer
-FROM stg_libro AS s
+FROM carga.stg_libro AS s
 JOIN biblioteca.categorias AS c ON c.genero = s.categoria
 JOIN biblioteca.autor AS a ON a.nombre_autor = s.autor
 WHERE s.motivo IS NULL;
 
 INSERT INTO biblioteca.ejemplares (isbn, id_ejemplar)
 SELECT s.isbn, copia.n
-FROM stg_libro AS s
+FROM carga.stg_libro AS s
 CROSS JOIN LATERAL generate_series(
     1, s.ejemplares_disponibles::integer
 ) AS copia(n)
@@ -134,15 +111,15 @@ WHERE s.motivo IS NULL;
 
 INSERT INTO biblioteca.rechazo_carga (archivo, linea, contenido, motivo)
 SELECT :'archivo', linea_csv, contenido, motivo
-FROM stg_libro
+FROM carga.stg_libro
 WHERE motivo IS NOT NULL;
 
 SELECT count(*) FILTER (WHERE motivo IS NULL) AS libros_cargados,
        count(*) FILTER (WHERE motivo IS NOT NULL) AS filas_rechazadas
-FROM stg_libro;
+FROM carga.stg_libro;
 
 SELECT linea_csv AS linea, motivo, contenido
-FROM stg_libro
+FROM carga.stg_libro
 WHERE motivo IS NOT NULL
 ORDER BY linea_csv;
 
