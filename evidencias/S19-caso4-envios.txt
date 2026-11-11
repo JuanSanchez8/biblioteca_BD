@@ -1,0 +1,41 @@
+Evidencia S19 - Caso 4: envios
+================================
+
+Salida copiada de psql sobre la base curso.
+
+curso=# SET search_path TO envios;
+SET
+
+curso=# SELECT num_guia, peso_kg, tarifa_kg, valor, peso_kg * tarifa_kg AS valor_calculado
+FROM envio
+WHERE valor::numeric <> peso_kg * tarifa_kg;
+
+ num_guia | peso_kg | tarifa_kg | valor | valor_calculado
+----------+---------+-----------+-------+-----------------
+ G07      |     4.0 |      6000 | 42000 |         24000.0
+(1 row)
+
+curso=# SELECT zona, count(DISTINCT tarifa_kg) AS tarifas
+FROM envio
+GROUP BY zona
+HAVING count(DISTINCT tarifa_kg) > 1;
+ zona | tarifas
+------+---------
+(0 rows)
+
+curso=# SELECT departamento, count(DISTINCT zona) AS zonas
+FROM envio
+GROUP BY departamento
+HAVING count(DISTINCT zona) > 1;
+ departamento | zonas
+--------------+-------
+(0 rows)
+
+curso=# \q
+
+Lectura de la evidencia:
+- G07 tiene peso de 4.0 kg y tarifa de 6000 por kg, por lo que su valor calculado es 24000.0. El valor almacenado (42000) no coincide.
+- No se encontraron zonas con más de una tarifa en estos datos.
+- No se encontraron departamentos asociados a más de una zona en estos datos.
+- Las dos últimas consultas solo muestran que las filas actuales no contradicen esas dependencias; no prueban por sí solas que sean 
+  reglas permanentes del negocio.
