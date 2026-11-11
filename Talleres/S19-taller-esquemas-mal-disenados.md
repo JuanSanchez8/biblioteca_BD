@@ -87,7 +87,7 @@ Una base en producción no se arregla borrando columnas de una vez. El orden rec
    docker compose exec postgres psql -U curso -d curso -f /scripts/S19-esquemas.sql
    ```
 
-3. Traer escritas las dependencias funcionales del esquema del proyecto, tabla por tabla, con la regla que justifica cada una (la tarea que dejó S18).
+3. Traer escritas las dependencias funcionales del esquema del proyecto, tabla por tabla, con la regla que justifica cada una (la tarea que dejó S18). Como punto de partida, consultar el [borrador de dependencias funcionales del proyecto Biblioteca](S19-dependencias-funcionales-proyecto.md) y confirmar sus reglas con el grupo.
 
 ## Los cuatro casos
 
