@@ -1,0 +1,232 @@
+﻿-- =====================================================
+-- S16 · Parte A · Esquema tienda
+-- =====================================================
+SET search_path TO tienda;
+SET
+
+-- Ejercicio 1: pedido 1003 con cliente, productos, cantidad y subtotal
+-- Filas esperadas: 2
+SELECT c.nombre  AS cliente,
+       pr.nombre AS producto,
+       d.cantidad,
+       d.cantidad * d.precio_unitario AS subtotal
+FROM pedido p
+JOIN cliente  c  ON c.id_cliente   = p.id_cliente
+JOIN detalle  d  ON d.id_pedido    = p.id_pedido
+JOIN producto pr ON pr.id_producto = d.id_producto
+WHERE p.id_pedido = 1003;
+   cliente   |          producto          | cantidad | subtotal 
+-------------+----------------------------+----------+----------
+ Laura Ortiz | Café de origen Cauca 500 g |        1 |    40000
+ Laura Ortiz | Prensa francesa            |        1 |    95000
+(2 rows)
+
+
+-- Ejercicio 2: cada cliente con el nombre de quien lo refirió (self-join externo)
+-- Filas esperadas: 8
+SELECT c.nombre AS cliente,
+       r.nombre AS referido_por
+FROM cliente c
+LEFT JOIN cliente r ON r.id_cliente = c.referido_por
+ORDER BY c.id_cliente;
+     cliente      |  referido_por   
+------------------+-----------------
+ Laura Ortiz      | 
+ Andrés Mejía     | Laura Ortiz
+ Paula Restrepo   | Laura Ortiz
+ Felipe Cárdenas  | 
+ Daniela Rincón   | Felipe Cárdenas
+ Jorge Salazar    | 
+ Natalia Quintero | Paula Restrepo
+ Óscar Vélez      | 
+(8 rows)
+
+
+-- Ejercicio 3: productos que nunca se han vendido (ni siquiera en pedidos cancelados)
+-- Filas esperadas: 1 (anti-join con NOT EXISTS)
+SELECT pr.nombre
+FROM producto pr
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM detalle d
+    WHERE d.id_producto = pr.id_producto
+);
+      nombre      
+------------------
+ Taza de cerámica
+(1 row)
+
+
+-- Ejercicio 4: cada cliente con su número de pedidos (incluidos cancelados), 0 si no tiene
+-- Filas esperadas: 8 (LEFT JOIN + count de la columna derecha)
+SELECT c.nombre,
+       count(p.id_pedido) AS num_pedidos
+FROM cliente c
+LEFT JOIN pedido p ON p.id_cliente = c.id_cliente
+GROUP BY c.id_cliente, c.nombre
+ORDER BY num_pedidos DESC, c.nombre;
+      nombre      | num_pedidos 
+------------------+-------------
+ Andrés Mejía     |           3
+ Felipe Cárdenas  |           3
+ Laura Ortiz      |           3
+ Paula Restrepo   |           2
+ Daniela Rincón   |           1
+ Natalia Quintero |           1
+ Óscar Vélez      |           1
+ Jorge Salazar    |           0
+(8 rows)
+
+
+-- Ejercicio 5: total vendido por categoría, sin cancelados, de mayor a menor
+-- Filas esperadas: 3
+SELECT pr.categoria,
+       sum(d.cantidad * d.precio_unitario) AS total_vendido
+FROM detalle d
+JOIN pedido   p  ON p.id_pedido    = d.id_pedido
+JOIN producto pr ON pr.id_producto = d.id_producto
+WHERE p.estado <> 'cancelado'
+GROUP BY pr.categoria
+ORDER BY total_vendido DESC;
+ categoria | total_vendido 
+-----------+---------------
+ Grano     |        480000
+ Accesorio |        376000
+ Molido    |        184000
+(3 rows)
+
+
+-- Ejercicio 6: meses de 2026 con ventas (sin cancelados) mayores a $200.000
+-- Filas esperadas: 2
+SELECT extract(month FROM p.fecha)          AS mes,
+       sum(d.cantidad * d.precio_unitario)  AS total_vendido
+FROM pedido p
+JOIN detalle d ON d.id_pedido = p.id_pedido
+WHERE p.estado <> 'cancelado'
+  AND extract(year FROM p.fecha) = 2026
+GROUP BY extract(month FROM p.fecha)
+HAVING sum(d.cantidad * d.precio_unitario) > 200000
+ORDER BY mes;
+ mes | total_vendido 
+-----+---------------
+   2 |        255000
+   4 |        393000
+(2 rows)
+
+
+-- Ejercicio 7: productos cuyo precio es mayor que el promedio de su categoría
+-- Filas esperadas: 4 (subconsulta correlacionada)
+SELECT p.nombre, p.categoria, p.precio
+FROM producto p
+WHERE p.precio > (
+    SELECT avg(p2.precio)
+    FROM producto p2
+    WHERE p2.categoria = p.categoria
+)
+ORDER BY p.categoria, p.precio DESC;
+           nombre            | categoria | precio 
+-----------------------------+-----------+--------
+ Molino manual               | Accesorio | 150000
+ Prensa francesa             | Accesorio |  95000
+ Café de origen Nariño 500 g | Grano     |  42000
+ Café molido premium 500 g   | Molido    |  30000
+(4 rows)
+
+
+-- Ejercicio 8: clientes de Cali que han comprado al menos un accesorio (sin cancelados)
+-- Filas esperadas: 2 (EXISTS: cada cliente una sola vez)
+SELECT c.nombre
+FROM cliente c
+WHERE c.ciudad = 'Cali'
+  AND EXISTS (
+      SELECT 1
+      FROM pedido p
+      JOIN detalle  d  ON d.id_pedido    = p.id_pedido
+      JOIN producto pr ON pr.id_producto = d.id_producto
+      WHERE p.id_cliente  = c.id_cliente
+        AND p.estado     <> 'cancelado'
+        AND pr.categoria  = 'Accesorio'
+  )
+ORDER BY c.nombre;
+     nombre     
+----------------
+ Daniela Rincón
+ Laura Ortiz
+(2 rows)
+
+
+-- Ejercicio 9: clientes que no han referido a nadie
+-- Filas esperadas: 5
+-- ¿Por qué la consulta original devuelve 0 filas?
+--   SELECT nombre FROM cliente
+--   WHERE id_cliente NOT IN (SELECT referido_por FROM cliente);
+-- La subconsulta trae la columna referido_por de todos los clientes, y los que
+-- llegaron solos tienen NULL. "x NOT IN (..., NULL)" equivale a
+-- "x <> ... AND x <> NULL"; la comparación con NULL da desconocido, así que la
+-- condición nunca es verdadera y el resultado queda vacío, sin ningún error.
+-- Corrección: NOT EXISTS, que no se ve afectado por los NULL.
+SELECT c.nombre
+FROM cliente c
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM cliente r
+    WHERE r.referido_por = c.id_cliente
+)
+ORDER BY c.nombre;
+      nombre      
+------------------
+ Andrés Mejía
+ Daniela Rincón
+ Jorge Salazar
+ Natalia Quintero
+ Óscar Vélez
+(5 rows)
+
+
+-- Ejercicio 10: el o los clientes que más han gastado (sin cancelados), con su total
+-- Filas esperadas: 2 (empate: se usa = max(...), no LIMIT 1)
+WITH gasto AS (
+    SELECT p.id_cliente,
+           sum(d.cantidad * d.precio_unitario) AS total
+    FROM pedido p
+    JOIN detalle d ON d.id_pedido = p.id_pedido
+    WHERE p.estado <> 'cancelado'
+    GROUP BY p.id_cliente
+)
+SELECT c.nombre, g.total
+FROM gasto g
+JOIN cliente c ON c.id_cliente = g.id_cliente
+WHERE g.total = (SELECT max(total) FROM gasto)
+ORDER BY c.nombre;
+      nombre      | total  
+------------------+--------
+ Laura Ortiz      | 287000
+ Natalia Quintero | 287000
+(2 rows)
+
+
+-- Ejercicio 11: clientes que han comprado TODOS los productos de Grano (sin cancelados)
+-- Filas esperadas: 2 (división con NOT EXISTS doble:
+-- "no existe un producto de Grano que el cliente no haya comprado")
+SELECT c.nombre
+FROM cliente c
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM producto pr
+    WHERE pr.categoria = 'Grano'
+      AND NOT EXISTS (
+          SELECT 1
+          FROM pedido p
+          JOIN detalle d ON d.id_pedido = p.id_pedido
+          WHERE p.id_cliente  = c.id_cliente
+            AND p.estado     <> 'cancelado'
+            AND d.id_producto = pr.id_producto
+      )
+)
+ORDER BY c.nombre;
+     nombre      
+-----------------
+ Felipe Cárdenas
+ Laura Ortiz
+(2 rows)
+
