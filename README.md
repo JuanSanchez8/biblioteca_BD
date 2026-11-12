@@ -126,3 +126,26 @@ docker compose exec postgres psql -U curso -d curso -f /scripts/S16-tienda.sql
 ```
 
 Luego abrir `entregas/S16/parte-a.sql` en el Query Tool de pgAdmin y ejecutarlo.
+
+## 5. S19 (casos y revisión del esquema)
+
+Desde la raíz del proyecto y con PostgreSQL en ejecución, preparar los datos
+iniciales de los cuatro casos:
+
+```
+docker compose exec postgres psql -U curso -d curso -P pager=off -f /scripts/S19-esquemas.sql
+```
+
+Este script borra y recrea únicamente los esquemas `gimnasio`, `farmacia`,
+`cursos_libres` y `envios`. Para volver a ejecutar las migraciones, correrlo
+primero otra vez.
+
+Después, copiar y ejecutar el archivo de casos con `psql`:
+
+```
+docker compose cp .\entregas\S19\casos.sql postgres:/tmp/S19-casos.sql
+docker compose exec postgres psql -U curso -d curso -P pager=off -f /tmp/S19-casos.sql
+```
+
+`casos.sql` incluye la evidencia, migraciones y verificaciones de los cuatro
+casos. La revisión del esquema Biblioteca está en `entregas\S19\parte-b.md`.
