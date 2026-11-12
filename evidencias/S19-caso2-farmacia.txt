@@ -1,0 +1,137 @@
+﻿SET search_path TO farmacia;
+SET
+SELECT num_formula
+FROM formula
+WHERE medicamento1 LIKE 'Acetaminof%'
+   OR medicamento2 LIKE 'Acetaminof%'
+   OR medicamento3 LIKE 'Acetaminof%';
+ num_formula 
+-------------
+         701
+         703
+         704
+(3 rows)
+
+SELECT doc_paciente, nombre_paciente, count(*) AS veces
+FROM formula
+GROUP BY doc_paciente, nombre_paciente
+ORDER BY veces DESC;
+ doc_paciente | nombre_paciente | veces 
+--------------+-----------------+-------
+ 1110000111   | Rosa Díaz       |     2
+ 1110000222   | Óscar Paz       |     1
+ 1110000333   | Elsa Mina       |     1
+(3 rows)
+
+BEGIN;
+BEGIN
+ALTER TABLE formula RENAME TO formula_vieja;
+ALTER TABLE
+CREATE TABLE paciente (
+    doc_paciente     varchar(15) PRIMARY KEY,
+    nombre_paciente  varchar(80) NOT NULL
+);
+CREATE TABLE
+CREATE TABLE formula (
+    num_formula   integer     PRIMARY KEY,
+    fecha         date        NOT NULL,
+    doc_paciente  varchar(15) NOT NULL REFERENCES paciente
+);
+CREATE TABLE
+CREATE TABLE medicamento (
+    nombre_medicamento  varchar(60) PRIMARY KEY
+);
+CREATE TABLE
+CREATE TABLE formula_detalle (
+    num_formula         integer     NOT NULL REFERENCES formula,
+    nombre_medicamento  varchar(60) NOT NULL REFERENCES medicamento,
+    dosis               varchar(40) NOT NULL,
+    PRIMARY KEY (num_formula, nombre_medicamento)
+);
+CREATE TABLE
+INSERT INTO paciente
+SELECT DISTINCT doc_paciente, nombre_paciente FROM formula_vieja;
+INSERT 0 3
+INSERT INTO formula
+SELECT num_formula, fecha, doc_paciente FROM formula_vieja;
+INSERT 0 4
+CREATE TEMP TABLE detalle_plano AS
+SELECT num_formula, medicamento1 AS nombre_medicamento, dosis1 AS dosis FROM formula_vieja
+UNION ALL
+SELECT num_formula, medicamento2, dosis2 FROM formula_vieja WHERE medicamento2 IS NOT NULL
+UNION ALL
+SELECT num_formula, medicamento3, dosis3 FROM formula_vieja WHERE medicamento3 IS NOT NULL;
+SELECT 8
+INSERT INTO medicamento
+SELECT DISTINCT nombre_medicamento FROM detalle_plano;
+INSERT 0 5
+INSERT INTO formula_detalle
+SELECT num_formula, nombre_medicamento, dosis FROM detalle_plano;
+INSERT 0 8
+SELECT 'paciente' AS tabla, count(*) FROM paciente
+UNION ALL SELECT 'formula', count(*) FROM formula
+UNION ALL SELECT 'medicamento', count(*) FROM medicamento
+UNION ALL SELECT 'formula_detalle', count(*) FROM formula_detalle;
+      tabla      | count 
+-----------------+-------
+ paciente        |     3
+ formula         |     4
+ medicamento     |     5
+ formula_detalle |     8
+(4 rows)
+
+SELECT count(DISTINCT num_formula) AS formulas_con_acetaminofen
+FROM formula_detalle
+WHERE nombre_medicamento LIKE 'Acetaminof%';
+ formulas_con_acetaminofen 
+---------------------------
+                         3
+(1 row)
+
+SAVEPOINT prueba;
+SAVEPOINT
+INSERT INTO formula_detalle VALUES (703, 'Loratadina 10 mg', 'cada 24 h');
+INSERT 0 1
+SELECT num_formula, count(*) AS medicamentos
+FROM formula_detalle WHERE num_formula = 703 GROUP BY num_formula;
+ num_formula | medicamentos 
+-------------+--------------
+         703 |            4
+(1 row)
+
+ROLLBACK TO SAVEPOINT prueba;
+ROLLBACK
+SELECT f.num_formula, f.fecha, f.doc_paciente, f.nombre_paciente,
+       d.nombre_medicamento, d.dosis
+FROM formula_vieja f
+JOIN detalle_plano d ON d.num_formula = f.num_formula
+EXCEPT
+SELECT f.num_formula, f.fecha, p.doc_paciente, p.nombre_paciente,
+       fd.nombre_medicamento, fd.dosis
+FROM formula f
+JOIN paciente p         ON p.doc_paciente = f.doc_paciente
+JOIN formula_detalle fd ON fd.num_formula = f.num_formula;
+ num_formula | fecha | doc_paciente | nombre_paciente | nombre_medicamento | dosis 
+-------------+-------+--------------+-----------------+--------------------+-------
+(0 rows)
+
+SELECT f.num_formula, f.fecha, p.doc_paciente, p.nombre_paciente,
+       fd.nombre_medicamento, fd.dosis
+FROM formula f
+JOIN paciente p         ON p.doc_paciente = f.doc_paciente
+JOIN formula_detalle fd ON fd.num_formula = f.num_formula
+EXCEPT
+SELECT f.num_formula, f.fecha, f.doc_paciente, f.nombre_paciente,
+       d.nombre_medicamento, d.dosis
+FROM formula_vieja f
+JOIN detalle_plano d ON d.num_formula = f.num_formula;
+ num_formula | fecha | doc_paciente | nombre_paciente | nombre_medicamento | dosis 
+-------------+-------+--------------+-----------------+--------------------+-------
+(0 rows)
+
+DROP TABLE detalle_plano;
+DROP TABLE
+DROP TABLE formula_vieja;
+DROP TABLE
+COMMIT;
+COMMIT
