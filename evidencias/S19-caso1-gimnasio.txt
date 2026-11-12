@@ -1,5 +1,3 @@
-Evidencia S19 - Caso 1: gimnasio
-================================
 
 Salida de psql sobre los datos iniciales del esquema gimnasio.
 
@@ -13,18 +11,51 @@ UNION ALL
 SELECT 'Spinning', COUNT(*)
 FROM socio
 WHERE clases LIKE '%Spinning%';
+# Evidencia S19 - Caso 1: gimnasio
+
+Salida de consultas SQL ejecutadas sobre PostgreSQL, base de datos `curso`.
+
+## 1. Evidencia del problema original
+
+Consulta utilizada para contar los socios inscritos en Yoga y Spinning:
+
+```sql
+SELECT 'Yoga' AS clase, COUNT(*) AS socios
+FROM gimnasio.socio
+WHERE clases LIKE '%Yoga%'
+UNION ALL
+SELECT 'Spinning', COUNT(*)
+FROM gimnasio.socio
+WHERE clases LIKE '%Spinning%';
+```
+
+Resultado:
+
+```text
   clase   | socios
 ----------+--------
  Yoga     |      2
  Spinning |      3
 (2 rows)
+```
 
-curso=# SELECT INITCAP(LOWER(TRIM(c.clase))) AS clase,
-COUNT(*) AS total_socios
-FROM socio s
-CROSS JOIN LATERAL string_to_table(s.clases, ';') AS c(clase)
-GROUP BY LOWER(TRIM(c.clase))
+Esta consulta produce resultados incorrectos porque distingue entre mayúsculas y minúsculas y porque `Spinning` también coincide con `Spinning avanzado`.
+
+## 2. Consulta corregida sobre los datos originales
+
+```sql
+SELECT INITCAP(TRIM(c.clase)) AS clase,
+       COUNT(*) AS total_socios
+FROM gimnasio.socio s
+CROSS JOIN LATERAL
+    string_to_table(s.clases, ';') AS c(clase)
+GROUP BY INITCAP(TRIM(c.clase))
 ORDER BY clase;
+```
+
+Resultado:
+
+```text
        clase       | total_socios
 -------------------+--------------
  Funcional         |            2
@@ -33,21 +64,114 @@ ORDER BY clase;
  Spinning Avanzado |            1
  Yoga              |            3
 (5 rows)
+```
 
-curso=# SELECT plan, valor_plan, COUNT(*) AS total_socios
-FROM socio
+La separación de los valores almacenados en `clases` permite identificar correctamente las inscripciones.
+
+## 3. Evidencia de redundancia de planes
+
+```sql
+SELECT plan, valor_plan,
+       COUNT(*) AS total_socios
+FROM gimnasio.socio
 GROUP BY plan, valor_plan
 ORDER BY plan;
+```
+
+Resultado:
+
+```text
     plan    | valor_plan | total_socios
-------------+------------+--------------
+------------+------------+-------------
  Anual      |     850000 |            2
  Mensual    |      90000 |            3
  Trimestral |     240000 |            1
 (3 rows)
+```
 
-Lectura de la evidencia:
-- El filtro con LIKE cuenta incorrectamente: encuentra 2 socios para Yoga y 3
-  para Spinning. Al separar y normalizar los nombres, los conteos correctos son
-  3 para Yoga y 2 para Spinning.
-- Los valores de los planes se repiten entre socios: Anual aparece 2 veces,
-  Mensual 3 y Trimestral 1.
+Los valores de los planes se repiten en varios socios. Esto evidencia la dependencia funcional `plan → valor_plan`.
+
+## 4. Verificación de la migración
+
+Se crearon cuatro tablas normalizadas:
+
+- `gimnasio.plan`
+- `gimnasio.socio_nuevo`
+- `gimnasio.clase`
+- `gimnasio.inscripcion_clase`
+
+Conteos obtenidos después de la migración:
+
+```text
+       tabla        | registros
+--------------------+-----------
+ Planes             |         3
+ Socios             |         6
+ Clases             |         5
+ Inscripciones      |         9
+(4 rows)
+```
+
+Los registros migrados corresponden a 3 planes, 6 socios, 5 clases diferentes y 9 inscripciones.
+
+## 5. Comparación de inscripciones originales y migradas
+
+Se ejecutó una consulta utilizando `EXCEPT` en ambos sentidos para identificar inscripciones faltantes o datos agregados incorrectamente.
+
+Resultado:
+
+```text
+(0 rows)
+```
+
+No se encontraron diferencias entre las combinaciones originales y migradas de socios y clases.
+
+## 6. Comparación de socios y planes
+
+Se compararon los identificadores, nombres, tipos de plan y valores originales contra los datos reconstruidos mediante las tablas normalizadas.
+
+Resultado:
+
+```text
+(0 rows)
+```
+
+No se encontraron diferencias entre los socios y planes originales y los migrados.
+
+## 7. Resultado de la consulta corregida
+
+Con el esquema normalizado, las clases se consultan mediante la relación entre `clase` e `inscripcion_clase`.
+
+```sql
+SELECT c.nombre AS clase,
+       COUNT(ic.id_socio) AS total_socios
+FROM gimnasio.clase c
+LEFT JOIN gimnasio.inscripcion_clase ic
+    ON ic.id_clase = c.id_clase
+GROUP BY c.id_clase, c.nombre
+ORDER BY c.nombre;
+```
+
+Resultado esperado a partir de los datos migrados:
+
+```text
+       clase       | total_socios
+-------------------+--------------
+ Funcional         |            2
+ Pilates           |            1
+ Spinning          |            2
+ Spinning Avanzado |            1
+ Yoga              |            3
+(5 rows)
+```
+
+## Lectura de la evidencia
+
+- El diseño original almacenaba varias clases en una sola columna, separadas por punto y coma.
+- La consulta inicial contaba 2 socios en Yoga y 3 en Spinning, mientras que los valores correctos eran 3 y 2, respectivamente.
+- Los nombres de clases tenían diferencias de mayúsculas, minúsculas y espacios.
+- Los valores de los planes se encontraban repetidos en la tabla de socios.
+- La normalización separó los planes, socios, clases e inscripciones en tablas relacionadas mediante claves primarias y foráneas.
+- Se migraron 9 inscripciones sin encontrar diferencias respecto a los datos originales.
+- Las verificaciones de socios, planes e inscripciones devolvieron 0 filas de diferencias.
+- El nuevo esquema permite contar los socios por clase sin buscar cadenas de texto dentro de una columna.
