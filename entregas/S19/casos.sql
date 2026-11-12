@@ -154,9 +154,7 @@ FROM envio_original AS e
 JOIN departamento AS d ON d.nombre = e.departamento
 ORDER BY e.ciudad_destino, d.id_departamento;
 
-INSERT INTO envio (
-    num_guia, fecha, id_ciudad, peso_kg, tarifa_kg_aplicada
-)
+INSERT INTO envio (num_guia, fecha, id_ciudad, peso_kg, tarifa_kg_aplicada)
 SELECT e.num_guia, e.fecha, c.id_ciudad, e.peso_kg, e.tarifa_kg
 FROM envio_original AS e
 JOIN departamento AS d ON d.nombre = e.departamento
@@ -164,6 +162,8 @@ JOIN ciudad AS c
   ON c.nombre = e.ciudad_destino
  AND c.id_departamento = d.id_departamento
 ORDER BY e.num_guia;
+
+------- IA
 
 -- Conteos esperados con los datos del script S19: 4, 3, 5 y 8.
 SELECT 'departamento' AS tabla, count(*) AS filas FROM departamento
@@ -221,9 +221,6 @@ FROM envio_con_valor
 WHERE num_guia = 'G07';
 
 -- Pregunta propia:
--- Si en enero cambia zona.tarifa_kg_vigente, los envios de octubre conservan
--- tarifa_kg_aplicada y por tanto su valor historico. Se guarda la tarifa en
--- cada envio porque representa lo cobrado en esa operacion, no una copia que
--- deba actualizarse con la tarifa vigente; no es redundancia accidental.
--- Para auditar todos los cambios de tarifas y sus periodos, podria modelarse
--- aparte una tabla de tarifas con fechas de vigencia.
+-- Si en enero cambia zona.tarifa_kg_vigente, los envios de octubre conservan tarifa_kg_aplicada y por tanto su valor historico. Se guarda la 
+-- tarifa en cada envio porque representa lo cobrado en esa operacion, no una copia que deba actualizarse con la tarifa vigente; no es redundancia 
+-- accidental. Para auditar todos los cambios de tarifas y sus periodos, podria modelarse aparte una tabla de tarifas con fechas de vigencia.
