@@ -12,7 +12,176 @@
 -- ===========================================================
 -- Caso 2 - farmacia
 -- ===========================================================
+-- (a) Diagnostico
+--
+-- Tabla original:
+-- formula (num_formula PK, fecha, doc_paciente, nombre_paciente,
+--          medicamento1, dosis1, medicamento2, dosis2, medicamento3, dosis3)
+--
+-- Dependencias / reglas:
+-- 1. num_formula -> fecha, doc_paciente
+--    Regla: cada formula tiene un numero unico, una fecha y un paciente.
+-- 2. doc_paciente -> nombre_paciente
+--    Regla: el documento identifica al paciente.
+-- 3. (num_formula, medicamento) -> dosis
+--    Regla: una formula tiene uno o varios medicamentos, cada uno con su dosis, y
+--    un mismo medicamento no aparece dos veces en la misma formula. La dosis
+--    depende de la formula y del medicamento (Acetaminofen es cada 8 h en la 701
+--    y cada 6 h en la 704).
+--
+-- Problema principal (queja): medicamento1..3 y dosis1..3 son un grupo repetido,
+-- asi que la tabla NO esta en 1FN. El numero de medicamentos queda limitado por
+-- el numero de columnas (no caben 4), y buscar un medicamento obliga a revisar
+-- las 3 columnas con OR, porque puede estar en cualquiera.
+--
+-- Problemas adicionales:
+-- - No esta en 3FN: num_formula -> doc_paciente -> nombre_paciente es una
+--   dependencia transitiva. El nombre del paciente se repite en cada formula suya.
+-- - La regla "un medicamento no aparece dos veces en la misma formula" no se puede
+--   imponer con una restriccion simple, porque el medicamento esta en 3 columnas.
+-- - Las formulas con menos de 3 medicamentos llenan columnas con NULL.
 
+-- (b) Evidencia
+SET search_path TO farmacia;
+
+-- Para contar formulas con acetaminofen hay que buscar en las 3 columnas
+SELECT num_formula
+FROM formula
+WHERE medicamento1 LIKE 'Acetaminof%'
+   OR medicamento2 LIKE 'Acetaminof%'
+   OR medicamento3 LIKE 'Acetaminof%';
+-- Resultado: 701, 703, 704 (aparece en medicamento2, medicamento3 y medicamento2)
+
+-- Redundancia del nombre del paciente
+SELECT doc_paciente, nombre_paciente, count(*) AS veces
+FROM formula
+GROUP BY doc_paciente, nombre_paciente
+ORDER BY veces DESC;
+-- Resultado: Rosa Diaz 2, Oscar Paz 1, Elsa Mina 1
+
+-- (c) Esquema corregido
+-- paciente        (doc_paciente PK, nombre_paciente NOT NULL)
+-- formula         (num_formula PK, fecha NOT NULL, doc_paciente FK -> paciente NOT NULL)
+-- medicamento     (nombre_medicamento PK)
+-- formula_detalle (num_formula FK -> formula, nombre_medicamento FK -> medicamento,
+--                  dosis NOT NULL, PK (num_formula, nombre_medicamento))
+
+-- (d) Migracion
+-- Conteos esperados (calculados antes de migrar):
+-- paciente = 3 (documentos distintos), formula = 4 (701 a 704),
+-- medicamento = 5 (Acetaminofen, Loratadina, Amoxicilina, Ibuprofeno, Omeprazol),
+-- formula_detalle = 8 (701: 2, 702: 1, 703: 3, 704: 2)
+
+BEGIN;
+
+ALTER TABLE formula RENAME TO formula_vieja;
+
+CREATE TABLE paciente (
+    doc_paciente     varchar(15) PRIMARY KEY,
+    nombre_paciente  varchar(80) NOT NULL
+);
+
+CREATE TABLE formula (
+    num_formula   integer     PRIMARY KEY,
+    fecha         date        NOT NULL,
+    doc_paciente  varchar(15) NOT NULL REFERENCES paciente
+);
+
+CREATE TABLE medicamento (
+    nombre_medicamento  varchar(60) PRIMARY KEY
+);
+
+CREATE TABLE formula_detalle (
+    num_formula         integer     NOT NULL REFERENCES formula,
+    nombre_medicamento  varchar(60) NOT NULL REFERENCES medicamento,
+    dosis               varchar(40) NOT NULL,
+    PRIMARY KEY (num_formula, nombre_medicamento)
+);
+
+INSERT INTO paciente
+SELECT DISTINCT doc_paciente, nombre_paciente FROM formula_vieja;
+
+INSERT INTO formula
+SELECT num_formula, fecha, doc_paciente FROM formula_vieja;
+
+-- Columnas numeradas a filas (UNION ALL); se omiten los NULL
+CREATE TEMP TABLE detalle_plano AS
+SELECT num_formula, medicamento1 AS nombre_medicamento, dosis1 AS dosis FROM formula_vieja
+UNION ALL
+SELECT num_formula, medicamento2, dosis2 FROM formula_vieja WHERE medicamento2 IS NOT NULL
+UNION ALL
+SELECT num_formula, medicamento3, dosis3 FROM formula_vieja WHERE medicamento3 IS NOT NULL;
+
+INSERT INTO medicamento
+SELECT DISTINCT nombre_medicamento FROM detalle_plano;
+
+INSERT INTO formula_detalle
+SELECT num_formula, nombre_medicamento, dosis FROM detalle_plano;
+
+-- (e) Verificacion
+-- Conteos obtenidos
+SELECT 'paciente' AS tabla, count(*) FROM paciente
+UNION ALL SELECT 'formula', count(*) FROM formula
+UNION ALL SELECT 'medicamento', count(*) FROM medicamento
+UNION ALL SELECT 'formula_detalle', count(*) FROM formula_detalle;
+-- Resultado: paciente 3, formula 4, medicamento 5, formula_detalle 8 (coincide)
+
+-- Queja resuelta (1): buscar acetaminofen es una sola condicion
+SELECT count(DISTINCT num_formula) AS formulas_con_acetaminofen
+FROM formula_detalle
+WHERE nombre_medicamento LIKE 'Acetaminof%';
+-- Resultado: 3
+
+-- Queja resuelta (2): una formula puede tener un cuarto medicamento.
+-- Se prueba dentro de un SAVEPOINT y se deshace para no inventar datos.
+SAVEPOINT prueba;
+INSERT INTO formula_detalle VALUES (703, 'Loratadina 10 mg', 'cada 24 h');
+SELECT num_formula, count(*) AS medicamentos
+FROM formula_detalle WHERE num_formula = 703 GROUP BY num_formula;
+-- Resultado: 703 | 4
+ROLLBACK TO SAVEPOINT prueba;
+
+-- No se perdio ningun dato
+SELECT f.num_formula, f.fecha, f.doc_paciente, f.nombre_paciente,
+       d.nombre_medicamento, d.dosis
+FROM formula_vieja f
+JOIN detalle_plano d ON d.num_formula = f.num_formula
+EXCEPT
+SELECT f.num_formula, f.fecha, p.doc_paciente, p.nombre_paciente,
+       fd.nombre_medicamento, fd.dosis
+FROM formula f
+JOIN paciente p         ON p.doc_paciente = f.doc_paciente
+JOIN formula_detalle fd ON fd.num_formula = f.num_formula;
+-- Resultado: 0 filas
+
+-- No se invento ningun dato
+SELECT f.num_formula, f.fecha, p.doc_paciente, p.nombre_paciente,
+       fd.nombre_medicamento, fd.dosis
+FROM formula f
+JOIN paciente p         ON p.doc_paciente = f.doc_paciente
+JOIN formula_detalle fd ON fd.num_formula = f.num_formula
+EXCEPT
+SELECT f.num_formula, f.fecha, f.doc_paciente, f.nombre_paciente,
+       d.nombre_medicamento, d.dosis
+FROM formula_vieja f
+JOIN detalle_plano d ON d.num_formula = f.num_formula;
+-- Resultado: 0 filas
+
+DROP TABLE detalle_plano;
+DROP TABLE formula_vieja;
+
+COMMIT;
+
+-- Pregunta propia: por que no basta con agregar medicamento4 y dosis4?
+-- 1. Solo mueve el limite: la primera formula con 5 medicamentos vuelve a fallar.
+--    El numero de medicamentos es un dato, no deberia ser parte de la estructura.
+-- 2. Cada consulta que busca un medicamento hay que reescribirla con otro OR, y
+--    cada reporte que cuenta medicamentos se vuelve mas largo; es facil olvidar
+--    una columna y obtener un resultado equivocado.
+-- 3. Sigue sin poderse imponer con una restriccion simple que un medicamento no
+--    se repita en la misma formula.
+-- 4. Agrega mas columnas casi siempre en NULL (la mayoria de formulas tienen 1 o 2).
+-- Con formula_detalle, un medicamento mas es una fila mas, sin cambiar la tabla.
 
 
 
