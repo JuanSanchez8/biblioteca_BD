@@ -19,7 +19,181 @@
 -- ===========================================================
 -- Caso 3 - cursos_libres
 -- ===========================================================
+-- (a) Diagnostico
+--
+-- Tabla original:
+-- inscripcion (id PK serial, doc_participante, nombre_participante, correo,
+--              cod_curso, nombre_curso, cod_sede, direccion_sede, valor_pagado)
+--
+-- Dependencias / reglas:
+-- 1. (doc_participante, cod_curso) -> valor_pagado
+--    Regla: un participante se inscribe a lo sumo una vez en cada curso, y el valor
+--    pagado es propio de esa inscripcion (puede tener descuento).
+--    => (doc_participante, cod_curso) es clave candidata, aunque no estaba declarada.
+-- 2. doc_participante -> nombre_participante, correo     (datos del participante)
+-- 3. correo -> doc_participante
+--    Regla: no hay dos participantes con el mismo correo.
+-- 4. cod_curso -> nombre_curso, cod_sede
+--    Regla: cada curso se dicta en una sola sede.
+-- 5. cod_sede -> direccion_sede                          (datos de la sede)
+--
+-- Problema principal (queja): la PK es un id serial que la base genera distinto en
+-- cada fila, y no hay UNIQUE (doc_participante, cod_curso). Por eso se guardo dos
+-- veces la inscripcion de Juliana Rey (1140000900) en C20 (ids 3 y 7) y el curso
+-- Fotografia digital suma 580000 en lugar de 380000: 200000 de mas.
+--
+-- Problemas adicionales:
+-- - No esta en 2FN: las dependencias 2 y 4 son parciales respecto a la clave
+--   candidata (doc_participante, cod_curso). Nombre y correo del participante, y
+--   nombre y sede del curso, se repiten en cada inscripcion.
+-- - No esta en 3FN: cod_curso -> cod_sede -> direccion_sede es transitiva. La
+--   direccion de la sede se repite en cada inscripcion de sus cursos.
 
+-- (b) Evidencia
+SET search_path TO cursos_libres;
+
+-- Inscripciones repetidas en la clave natural
+SELECT doc_participante, cod_curso, count(*) AS veces
+FROM inscripcion
+GROUP BY doc_participante, cod_curso
+HAVING count(*) > 1;
+-- Resultado: 1140000900 | C20 | 2
+
+-- Recaudo por curso, tal como lo ve contabilidad
+SELECT cod_curso, nombre_curso, sum(valor_pagado) AS recaudado
+FROM inscripcion
+GROUP BY cod_curso, nombre_curso
+ORDER BY cod_curso;
+-- Resultado: C20 Fotografia digital = 580000 (deberia ser 380000)
+
+-- Redundancia de datos del participante
+SELECT doc_participante, nombre_participante, count(*) AS veces
+FROM inscripcion
+GROUP BY doc_participante, nombre_participante
+ORDER BY veces DESC;
+-- Resultado: Juliana Rey 3, Valeria Ospina 2, Mateo Gil 2, Esteban Cruz 1
+
+-- Redundancia de la direccion de la sede
+SELECT cod_sede, direccion_sede, count(*) AS veces
+FROM inscripcion
+GROUP BY cod_sede, direccion_sede;
+-- Resultado: S1 5 veces, S2 3 veces
+
+-- (c) Esquema corregido
+-- sede         (cod_sede PK, direccion_sede NOT NULL)
+-- curso        (cod_curso PK, nombre_curso NOT NULL, cod_sede FK -> sede NOT NULL)
+-- participante (doc_participante PK, nombre_participante NOT NULL,
+--               correo UNIQUE NOT NULL)
+-- inscripcion  (doc_participante FK -> participante, cod_curso FK -> curso,
+--               valor_pagado NOT NULL, PK (doc_participante, cod_curso))
+
+-- (d) Migracion
+-- Decision sobre el duplicado: las filas id 3 y 7 son identicas (mismo participante,
+-- curso y valor). Se conserva una sola (la primera registrada, id 3); como son
+-- iguales, DISTINCT produce el mismo resultado.
+--
+-- Conteos esperados (calculados antes de migrar):
+-- sede = 2 (S1, S2), curso = 3 (C10, C20, C30),
+-- participante = 4 (documentos distintos), inscripcion = 7 (8 filas - 1 duplicada)
+
+BEGIN;
+
+ALTER TABLE inscripcion RENAME TO inscripcion_vieja;
+
+CREATE TABLE sede (
+    cod_sede        char(2)     PRIMARY KEY,
+    direccion_sede  varchar(60) NOT NULL
+);
+
+CREATE TABLE curso (
+    cod_curso     char(3)     PRIMARY KEY,
+    nombre_curso  varchar(60) NOT NULL,
+    cod_sede      char(2)     NOT NULL REFERENCES sede
+);
+
+CREATE TABLE participante (
+    doc_participante     varchar(15)  PRIMARY KEY,
+    nombre_participante  varchar(80)  NOT NULL,
+    correo               varchar(120) NOT NULL UNIQUE
+);
+
+CREATE TABLE inscripcion (
+    doc_participante  varchar(15) NOT NULL REFERENCES participante,
+    cod_curso         char(3)     NOT NULL REFERENCES curso,
+    valor_pagado      integer     NOT NULL,
+    PRIMARY KEY (doc_participante, cod_curso)
+);
+
+INSERT INTO sede
+SELECT DISTINCT cod_sede, direccion_sede FROM inscripcion_vieja;
+
+INSERT INTO curso
+SELECT DISTINCT cod_curso, nombre_curso, cod_sede FROM inscripcion_vieja;
+
+INSERT INTO participante
+SELECT DISTINCT doc_participante, nombre_participante, correo FROM inscripcion_vieja;
+
+INSERT INTO inscripcion
+SELECT DISTINCT doc_participante, cod_curso, valor_pagado FROM inscripcion_vieja;
+
+-- (e) Verificacion
+-- Conteos obtenidos
+SELECT 'sede' AS tabla, count(*) FROM sede
+UNION ALL SELECT 'curso', count(*) FROM curso
+UNION ALL SELECT 'participante', count(*) FROM participante
+UNION ALL SELECT 'inscripcion', count(*) FROM inscripcion;
+-- Resultado: sede 2, curso 3, participante 4, inscripcion 7 (coincide con lo esperado)
+
+-- Queja resuelta en el esquema nuevo
+SELECT c.cod_curso, c.nombre_curso, sum(i.valor_pagado) AS recaudado
+FROM inscripcion i
+JOIN curso c ON c.cod_curso = i.cod_curso
+GROUP BY c.cod_curso, c.nombre_curso
+ORDER BY c.cod_curso;
+-- Resultado: C20 Fotografia digital = 380000
+
+-- No se perdio ningun dato
+SELECT doc_participante, nombre_participante, correo, cod_curso,
+       nombre_curso, cod_sede, direccion_sede, valor_pagado
+FROM inscripcion_vieja
+EXCEPT
+SELECT p.doc_participante, p.nombre_participante, p.correo, c.cod_curso,
+       c.nombre_curso, s.cod_sede, s.direccion_sede, i.valor_pagado
+FROM inscripcion i
+JOIN participante p ON p.doc_participante = i.doc_participante
+JOIN curso c        ON c.cod_curso = i.cod_curso
+JOIN sede s         ON s.cod_sede = c.cod_sede;
+-- Resultado: 0 filas
+
+-- No se invento ningun dato
+SELECT p.doc_participante, p.nombre_participante, p.correo, c.cod_curso,
+       c.nombre_curso, s.cod_sede, s.direccion_sede, i.valor_pagado
+FROM inscripcion i
+JOIN participante p ON p.doc_participante = i.doc_participante
+JOIN curso c        ON c.cod_curso = i.cod_curso
+JOIN sede s         ON s.cod_sede = c.cod_sede
+EXCEPT
+SELECT doc_participante, nombre_participante, correo, cod_curso,
+       nombre_curso, cod_sede, direccion_sede, valor_pagado
+FROM inscripcion_vieja;
+-- Resultado: 0 filas
+
+DROP TABLE inscripcion_vieja;
+
+COMMIT;
+
+-- Pregunta propia
+-- La tabla tiene una PK de una sola columna (id), pero eso no la pone en 2FN.
+-- Las formas normales se evaluan sobre TODAS las claves candidatas, no solo la PK
+-- declarada. Por la regla del negocio, (doc_participante, cod_curso) tambien
+-- identifica una inscripcion, asi que es clave candidata aunque nadie la haya
+-- declarado. Respecto a ella, doc_participante -> nombre, correo y
+-- cod_curso -> nombre_curso, cod_sede son dependencias parciales: no esta en 2FN.
+-- Agregar un id no normaliza nada; solo cambia el nombre de la PK.
+--
+-- Al diseno original le faltaba UNIQUE (doc_participante, cod_curso). Con esa
+-- restriccion, la segunda inscripcion de Juliana Rey en C20 habria sido rechazada
+-- y contabilidad no habria contado 200000 de mas.
 
 
 
