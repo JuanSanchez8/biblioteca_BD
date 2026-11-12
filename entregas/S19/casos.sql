@@ -7,27 +7,603 @@
 -- Caso 1 - gimnasio
 -- ===========================================================
 
+-- (a) DIAGNOSTICO
+-- Tabla original:
+-- socio (id_socio PK, nombre, plan, valor_plan, clases)
 
+-- Problema principal:
+-- La columna clases almacena varios valores separados por ';'.
+-- Esto representa un grupo de valores multivaluados y no
+-- cumple con el diseño relacional esperado en 1FN.
 
+-- Ejemplo:
+-- Laura Cifuentes: 'Yoga; Spinning'
+-- Maria Fernanda: 'Pilates;yoga'
+-- Andres Mosquera: 'Spinning; Funcional; Yoga '
+
+-- La consulta con LIKE produce resultados incorrectos:
+-- Yoga = 2, cuando realmente son 3.
+-- Spinning = 3, cuando realmente son 2.
+
+-- Problema adicional:
+-- El valor del plan se repite para todos los socios
+-- que tienen el mismo tipo de plan.
+
+-- Dependencias funcionales:
+-- 1. id_socio -> nombre, plan, valor_plan, clases
+--    Cada socio se identifica por su id_socio.
+-- 2. plan -> valor_plan
+--    Cada tipo de plan tiene un valor fijo.
+
+-- Existe una dependencia transitiva:
+-- id_socio -> plan -> valor_plan.
+-- Por ello, el almacenamiento de valor_plan en socio
+-- incumple 3FN.
+
+-- Solucion:
+-- Separar planes, socios, clases e inscripciones.
+
+-- (b) EVIDENCIA DEL PROBLEMA
+
+-- Consulta incorrecta que explica la queja:
+SELECT
+    'Yoga' AS clase,
+    COUNT(*) AS socios
+FROM gimnasio.socio
+WHERE clases LIKE '%Yoga%'
+
+UNION ALL
+
+SELECT
+    'Spinning' AS clase,
+    COUNT(*) AS socios
+FROM gimnasio.socio
+WHERE clases LIKE '%Spinning%';
+-- Resultado observado:
+-- Yoga     | 2
+-- Spinning | 3
+
+-- Conteo correcto separando las clases:
+SELECT
+    INITCAP(LOWER(TRIM(c.clase))) AS clase,
+    COUNT(*) AS total_socios
+FROM gimnasio.socio s
+CROSS JOIN LATERAL
+    string_to_table(s.clases, ';') AS c(clase)
+GROUP BY LOWER(TRIM(c.clase))
+ORDER BY clase;
+-- Resultado observado:
+-- Funcional         | 2
+-- Pilates           | 1
+-- Spinning          | 2
+-- Spinning Avanzado | 1
+-- Yoga              | 3
+
+-- Evidencia de redundancia de planes:
+SELECT
+    plan,
+    valor_plan,
+    COUNT(*) AS total_socios
+FROM gimnasio.socio
+GROUP BY plan, valor_plan
+ORDER BY plan;
+-- Resultado observado:
+-- Anual      | 850000 | 2
+-- Mensual    |  90000 | 3
+-- Trimestral | 240000 | 1
+
+-- (c) ESQUEMA CORREGIDO:
+-- plan (
+--     nombre_plan PK,
+--     valor_plan NOT NULL
+-- )
+-- socio_nuevo (
+--     id_socio PK,
+--     nombre NOT NULL,
+--     nombre_plan FK -> plan
+-- )
+-- clase (
+--     id_clase PK,
+--     nombre UNIQUE NOT NULL
+-- )
+-- inscripcion_clase (
+--     id_socio FK -> socio_nuevo,
+--     id_clase FK -> clase,
+--     PK (id_socio, id_clase)
+-- )
+-- Se utiliza una tabla intermedia porque un socio puede inscribirse 
+-- en varias clases y una clase puede tener varios socios.
+
+-- (d) MIGRACION TRANSACCIONAL
+-- Conteos esperados antes de migrar:
+-- Planes: 3
+-- Socios: 6
+-- Clases: 5
+-- Inscripciones: 9
+
+BEGIN;
+-- Crear tabla de planes.
+CREATE TABLE gimnasio.plan (
+    nombre_plan VARCHAR(20) PRIMARY KEY,
+    valor_plan INTEGER NOT NULL
+        CHECK (valor_plan >= 0)
+);
+-- Crear tabla de socios normalizados.
+CREATE TABLE gimnasio.socio_nuevo (
+    id_socio INTEGER PRIMARY KEY,
+    nombre VARCHAR(80) NOT NULL,
+    nombre_plan VARCHAR(20) NOT NULL,
+    FOREIGN KEY (nombre_plan)
+        REFERENCES gimnasio.plan(nombre_plan)
+);
+-- Crear tabla de clases.
+CREATE TABLE gimnasio.clase (
+    id_clase INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    nombre VARCHAR(80) NOT NULL UNIQUE
+);
+-- Crear tabla de inscripciones.
+CREATE TABLE gimnasio.inscripcion_clase (
+    id_socio INTEGER NOT NULL,
+    id_clase INTEGER NOT NULL,
+    PRIMARY KEY (id_socio, id_clase),
+    FOREIGN KEY (id_socio)
+        REFERENCES gimnasio.socio_nuevo(id_socio),
+    FOREIGN KEY (id_clase)
+        REFERENCES gimnasio.clase(id_clase)
+);
+-- Migrar planes sin duplicados.
+INSERT INTO gimnasio.plan (nombre_plan, valor_plan)
+SELECT DISTINCT
+    plan,
+    valor_plan
+FROM gimnasio.socio;
+-- Migrar socios.
+INSERT INTO gimnasio.socio_nuevo (
+    id_socio,
+    nombre,
+    nombre_plan
+)
+SELECT
+    id_socio,
+    nombre,
+    plan
+FROM gimnasio.socio;
+-- Migrar clases normalizando mayusculas y espacios.
+INSERT INTO gimnasio.clase (nombre)
+SELECT DISTINCT
+    INITCAP(LOWER(TRIM(c.clase)))
+FROM gimnasio.socio s
+CROSS JOIN LATERAL
+    string_to_table(s.clases, ';') AS c(clase)
+WHERE TRIM(c.clase) <> '';
+-- Migrar inscripciones.
+INSERT INTO gimnasio.inscripcion_clase (
+    id_socio,
+    id_clase
+)
+SELECT DISTINCT
+    s.id_socio,
+    cl.id_clase
+FROM gimnasio.socio s
+CROSS JOIN LATERAL
+    string_to_table(s.clases, ';') AS c(clase)
+JOIN gimnasio.clase cl
+    ON cl.nombre = INITCAP(LOWER(TRIM(c.clase)));
+
+-- (e) VERIFICACION
+-- Conteos de las tablas normalizadas.
+SELECT 'Planes' AS tabla, COUNT(*) AS registros
+FROM gimnasio.plan
+UNION ALL
+SELECT 'Socios', COUNT(*)
+FROM gimnasio.socio_nuevo
+UNION ALL
+SELECT 'Clases', COUNT(*)
+FROM gimnasio.clase
+UNION ALL
+SELECT 'Inscripciones', COUNT(*)
+FROM gimnasio.inscripcion_clase;
+-- Resultado esperado y observado:
+-- Planes        | 3
+-- Socios        | 6
+-- Clases        | 5
+-- Inscripciones | 9
+-- Resolver la queja original con el esquema corregido.
+SELECT
+    c.nombre AS clase,
+    COUNT(ic.id_socio) AS total_socios
+FROM gimnasio.clase c
+LEFT JOIN gimnasio.inscripcion_clase ic
+    ON ic.id_clase = c.id_clase
+GROUP BY c.id_clase, c.nombre
+ORDER BY c.nombre;
+-- Resultado:
+-- Funcional         | 2
+-- Pilates           | 1
+-- Spinning          | 2
+-- Spinning Avanzado | 1
+-- Yoga              | 3
+COMMIT;
+
+-- PREGUNTA PROPIA DEL CASO 1
+-- ¿Donde guardar el horario de cada clase?
+-- El horario debe guardarse en una tabla independiente
+-- llamada horario_clase, relacionada con clase mediante
+-- una clave foranea.
+
+-- horario_clase (
+--     id_horario PK,
+--     id_clase FK,
+--     dia_semana,
+--     hora_inicio,
+--     hora_fin
+-- )
+-- Una clase puede tener varios horarios durante la semana.
+-- En el diseño original, las clases estaban almacenadas
+-- como texto dentro de socio.clases, sin identificadores
+-- individuales ni una entidad clase.
+-- Por esta razon no era posible relacionar correctamente
+-- los horarios mediante claves foraneas.
 
 -- ===========================================================
 -- Caso 2 - farmacia
 -- ===========================================================
+-- (a) Diagnostico
+--
+-- Tabla original:
+-- formula (num_formula PK, fecha, doc_paciente, nombre_paciente,
+--          medicamento1, dosis1, medicamento2, dosis2, medicamento3, dosis3)
+--
+-- Dependencias / reglas:
+-- 1. num_formula -> fecha, doc_paciente
+--    Regla: cada formula tiene un numero unico, una fecha y un paciente.
+-- 2. doc_paciente -> nombre_paciente
+--    Regla: el documento identifica al paciente.
+-- 3. (num_formula, medicamento) -> dosis
+--    Regla: una formula tiene uno o varios medicamentos, cada uno con su dosis, y
+--    un mismo medicamento no aparece dos veces en la misma formula. La dosis
+--    depende de la formula y del medicamento (Acetaminofen es cada 8 h en la 701
+--    y cada 6 h en la 704).
+--
+-- Problema principal (queja): medicamento1..3 y dosis1..3 son un grupo repetido,
+-- asi que la tabla NO esta en 1FN. El numero de medicamentos queda limitado por
+-- el numero de columnas (no caben 4), y buscar un medicamento obliga a revisar
+-- las 3 columnas con OR, porque puede estar en cualquiera.
+--
+-- Problemas adicionales:
+-- - No esta en 3FN: num_formula -> doc_paciente -> nombre_paciente es una
+--   dependencia transitiva. El nombre del paciente se repite en cada formula suya.
+-- - La regla "un medicamento no aparece dos veces en la misma formula" no se puede
+--   imponer con una restriccion simple, porque el medicamento esta en 3 columnas.
+-- - Las formulas con menos de 3 medicamentos llenan columnas con NULL.
 
+-- (b) Evidencia
+SET search_path TO farmacia;
 
+-- Para contar formulas con acetaminofen hay que buscar en las 3 columnas
+SELECT num_formula
+FROM formula
+WHERE medicamento1 LIKE 'Acetaminof%'
+   OR medicamento2 LIKE 'Acetaminof%'
+   OR medicamento3 LIKE 'Acetaminof%';
+-- Resultado: 701, 703, 704 (aparece en medicamento2, medicamento3 y medicamento2)
+
+-- Redundancia del nombre del paciente
+SELECT doc_paciente, nombre_paciente, count(*) AS veces
+FROM formula
+GROUP BY doc_paciente, nombre_paciente
+ORDER BY veces DESC;
+-- Resultado: Rosa Diaz 2, Oscar Paz 1, Elsa Mina 1
+
+-- (c) Esquema corregido
+-- paciente        (doc_paciente PK, nombre_paciente NOT NULL)
+-- formula         (num_formula PK, fecha NOT NULL, doc_paciente FK -> paciente NOT NULL)
+-- medicamento     (nombre_medicamento PK)
+-- formula_detalle (num_formula FK -> formula, nombre_medicamento FK -> medicamento,
+--                  dosis NOT NULL, PK (num_formula, nombre_medicamento))
+
+-- (d) Migracion
+-- Conteos esperados (calculados antes de migrar):
+-- paciente = 3 (documentos distintos), formula = 4 (701 a 704),
+-- medicamento = 5 (Acetaminofen, Loratadina, Amoxicilina, Ibuprofeno, Omeprazol),
+-- formula_detalle = 8 (701: 2, 702: 1, 703: 3, 704: 2)
+
+BEGIN;
+
+ALTER TABLE formula RENAME TO formula_vieja;
+
+CREATE TABLE paciente (
+    doc_paciente     varchar(15) PRIMARY KEY,
+    nombre_paciente  varchar(80) NOT NULL
+);
+
+CREATE TABLE formula (
+    num_formula   integer     PRIMARY KEY,
+    fecha         date        NOT NULL,
+    doc_paciente  varchar(15) NOT NULL REFERENCES paciente
+);
+
+CREATE TABLE medicamento (
+    nombre_medicamento  varchar(60) PRIMARY KEY
+);
+
+CREATE TABLE formula_detalle (
+    num_formula         integer     NOT NULL REFERENCES formula,
+    nombre_medicamento  varchar(60) NOT NULL REFERENCES medicamento,
+    dosis               varchar(40) NOT NULL,
+    PRIMARY KEY (num_formula, nombre_medicamento)
+);
+
+INSERT INTO paciente
+SELECT DISTINCT doc_paciente, nombre_paciente FROM formula_vieja;
+
+INSERT INTO formula
+SELECT num_formula, fecha, doc_paciente FROM formula_vieja;
+
+-- Columnas numeradas a filas (UNION ALL); se omiten los NULL
+CREATE TEMP TABLE detalle_plano AS
+SELECT num_formula, medicamento1 AS nombre_medicamento, dosis1 AS dosis FROM formula_vieja
+UNION ALL
+SELECT num_formula, medicamento2, dosis2 FROM formula_vieja WHERE medicamento2 IS NOT NULL
+UNION ALL
+SELECT num_formula, medicamento3, dosis3 FROM formula_vieja WHERE medicamento3 IS NOT NULL;
+
+INSERT INTO medicamento
+SELECT DISTINCT nombre_medicamento FROM detalle_plano;
+
+INSERT INTO formula_detalle
+SELECT num_formula, nombre_medicamento, dosis FROM detalle_plano;
+
+-- (e) Verificacion
+-- Conteos obtenidos
+SELECT 'paciente' AS tabla, count(*) FROM paciente
+UNION ALL SELECT 'formula', count(*) FROM formula
+UNION ALL SELECT 'medicamento', count(*) FROM medicamento
+UNION ALL SELECT 'formula_detalle', count(*) FROM formula_detalle;
+-- Resultado: paciente 3, formula 4, medicamento 5, formula_detalle 8 (coincide)
+
+-- Queja resuelta (1): buscar acetaminofen es una sola condicion
+SELECT count(DISTINCT num_formula) AS formulas_con_acetaminofen
+FROM formula_detalle
+WHERE nombre_medicamento LIKE 'Acetaminof%';
+-- Resultado: 3
+
+-- Queja resuelta (2): una formula puede tener un cuarto medicamento.
+-- Se prueba dentro de un SAVEPOINT y se deshace para no inventar datos.
+SAVEPOINT prueba;
+INSERT INTO formula_detalle VALUES (703, 'Loratadina 10 mg', 'cada 24 h');
+SELECT num_formula, count(*) AS medicamentos
+FROM formula_detalle WHERE num_formula = 703 GROUP BY num_formula;
+-- Resultado: 703 | 4
+ROLLBACK TO SAVEPOINT prueba;
+
+-- No se perdio ningun dato
+SELECT f.num_formula, f.fecha, f.doc_paciente, f.nombre_paciente,
+       d.nombre_medicamento, d.dosis
+FROM formula_vieja f
+JOIN detalle_plano d ON d.num_formula = f.num_formula
+EXCEPT
+SELECT f.num_formula, f.fecha, p.doc_paciente, p.nombre_paciente,
+       fd.nombre_medicamento, fd.dosis
+FROM formula f
+JOIN paciente p         ON p.doc_paciente = f.doc_paciente
+JOIN formula_detalle fd ON fd.num_formula = f.num_formula;
+-- Resultado: 0 filas
+
+-- No se invento ningun dato
+SELECT f.num_formula, f.fecha, p.doc_paciente, p.nombre_paciente,
+       fd.nombre_medicamento, fd.dosis
+FROM formula f
+JOIN paciente p         ON p.doc_paciente = f.doc_paciente
+JOIN formula_detalle fd ON fd.num_formula = f.num_formula
+EXCEPT
+SELECT f.num_formula, f.fecha, f.doc_paciente, f.nombre_paciente,
+       d.nombre_medicamento, d.dosis
+FROM formula_vieja f
+JOIN detalle_plano d ON d.num_formula = f.num_formula;
+-- Resultado: 0 filas
+
+DROP TABLE detalle_plano;
+DROP TABLE formula_vieja;
+
+COMMIT;
+
+-- Pregunta propia: por que no basta con agregar medicamento4 y dosis4?
+-- 1. Solo mueve el limite: la primera formula con 5 medicamentos vuelve a fallar.
+--    El numero de medicamentos es un dato, no deberia ser parte de la estructura.
+-- 2. Cada consulta que busca un medicamento hay que reescribirla con otro OR, y
+--    cada reporte que cuenta medicamentos se vuelve mas largo; es facil olvidar
+--    una columna y obtener un resultado equivocado.
+-- 3. Sigue sin poderse imponer con una restriccion simple que un medicamento no
+--    se repita en la misma formula.
+-- 4. Agrega mas columnas casi siempre en NULL (la mayoria de formulas tienen 1 o 2).
+-- Con formula_detalle, un medicamento mas es una fila mas, sin cambiar la tabla.
 
 
 -- ===========================================================
 -- Caso 3 - cursos_libres
 -- ===========================================================
+-- (a) Diagnostico
+--
+-- Tabla original:
+-- inscripcion (id PK serial, doc_participante, nombre_participante, correo,
+--              cod_curso, nombre_curso, cod_sede, direccion_sede, valor_pagado)
+--
+-- Dependencias / reglas:
+-- 1. (doc_participante, cod_curso) -> valor_pagado
+--    Regla: un participante se inscribe a lo sumo una vez en cada curso, y el valor
+--    pagado es propio de esa inscripcion (puede tener descuento).
+--    => (doc_participante, cod_curso) es clave candidata, aunque no estaba declarada.
+-- 2. doc_participante -> nombre_participante, correo     (datos del participante)
+-- 3. correo -> doc_participante
+--    Regla: no hay dos participantes con el mismo correo.
+-- 4. cod_curso -> nombre_curso, cod_sede
+--    Regla: cada curso se dicta en una sola sede.
+-- 5. cod_sede -> direccion_sede                          (datos de la sede)
+--
+-- Problema principal (queja): la PK es un id serial que la base genera distinto en
+-- cada fila, y no hay UNIQUE (doc_participante, cod_curso). Por eso se guardo dos
+-- veces la inscripcion de Juliana Rey (1140000900) en C20 (ids 3 y 7) y el curso
+-- Fotografia digital suma 580000 en lugar de 380000: 200000 de mas.
+--
+-- Problemas adicionales:
+-- - No esta en 2FN: las dependencias 2 y 4 son parciales respecto a la clave
+--   candidata (doc_participante, cod_curso). Nombre y correo del participante, y
+--   nombre y sede del curso, se repiten en cada inscripcion.
+-- - No esta en 3FN: cod_curso -> cod_sede -> direccion_sede es transitiva. La
+--   direccion de la sede se repite en cada inscripcion de sus cursos.
 
+-- (b) Evidencia
+SET search_path TO cursos_libres;
+
+-- Inscripciones repetidas en la clave natural
+SELECT doc_participante, cod_curso, count(*) AS veces
+FROM inscripcion
+GROUP BY doc_participante, cod_curso
+HAVING count(*) > 1;
+-- Resultado: 1140000900 | C20 | 2
+
+-- Recaudo por curso, tal como lo ve contabilidad
+SELECT cod_curso, nombre_curso, sum(valor_pagado) AS recaudado
+FROM inscripcion
+GROUP BY cod_curso, nombre_curso
+ORDER BY cod_curso;
+-- Resultado: C20 Fotografia digital = 580000 (deberia ser 380000)
+
+-- Redundancia de datos del participante
+SELECT doc_participante, nombre_participante, count(*) AS veces
+FROM inscripcion
+GROUP BY doc_participante, nombre_participante
+ORDER BY veces DESC;
+-- Resultado: Juliana Rey 3, Valeria Ospina 2, Mateo Gil 2, Esteban Cruz 1
+
+-- Redundancia de la direccion de la sede
+SELECT cod_sede, direccion_sede, count(*) AS veces
+FROM inscripcion
+GROUP BY cod_sede, direccion_sede;
+-- Resultado: S1 5 veces, S2 3 veces
+
+-- (c) Esquema corregido
+-- sede         (cod_sede PK, direccion_sede NOT NULL)
+-- curso        (cod_curso PK, nombre_curso NOT NULL, cod_sede FK -> sede NOT NULL)
+-- participante (doc_participante PK, nombre_participante NOT NULL,
+--               correo UNIQUE NOT NULL)
+-- inscripcion  (doc_participante FK -> participante, cod_curso FK -> curso,
+--               valor_pagado NOT NULL, PK (doc_participante, cod_curso))
+
+-- (d) Migracion
+-- Decision sobre el duplicado: las filas id 3 y 7 son identicas (mismo participante,
+-- curso y valor). Se conserva una sola (la primera registrada, id 3); como son
+-- iguales, DISTINCT produce el mismo resultado.
+--
+-- Conteos esperados (calculados antes de migrar):
+-- sede = 2 (S1, S2), curso = 3 (C10, C20, C30),
+-- participante = 4 (documentos distintos), inscripcion = 7 (8 filas - 1 duplicada)
+
+BEGIN;
+
+ALTER TABLE inscripcion RENAME TO inscripcion_vieja;
+
+CREATE TABLE sede (
+    cod_sede        char(2)     PRIMARY KEY,
+    direccion_sede  varchar(60) NOT NULL
+);
+
+CREATE TABLE curso (
+    cod_curso     char(3)     PRIMARY KEY,
+    nombre_curso  varchar(60) NOT NULL,
+    cod_sede      char(2)     NOT NULL REFERENCES sede
+);
+
+CREATE TABLE participante (
+    doc_participante     varchar(15)  PRIMARY KEY,
+    nombre_participante  varchar(80)  NOT NULL,
+    correo               varchar(120) NOT NULL UNIQUE
+);
+
+CREATE TABLE inscripcion (
+    doc_participante  varchar(15) NOT NULL REFERENCES participante,
+    cod_curso         char(3)     NOT NULL REFERENCES curso,
+    valor_pagado      integer     NOT NULL,
+    PRIMARY KEY (doc_participante, cod_curso)
+);
+
+INSERT INTO sede
+SELECT DISTINCT cod_sede, direccion_sede FROM inscripcion_vieja;
+
+INSERT INTO curso
+SELECT DISTINCT cod_curso, nombre_curso, cod_sede FROM inscripcion_vieja;
+
+INSERT INTO participante
+SELECT DISTINCT doc_participante, nombre_participante, correo FROM inscripcion_vieja;
+
+INSERT INTO inscripcion
+SELECT DISTINCT doc_participante, cod_curso, valor_pagado FROM inscripcion_vieja;
+
+-- (e) Verificacion
+-- Conteos obtenidos
+SELECT 'sede' AS tabla, count(*) FROM sede
+UNION ALL SELECT 'curso', count(*) FROM curso
+UNION ALL SELECT 'participante', count(*) FROM participante
+UNION ALL SELECT 'inscripcion', count(*) FROM inscripcion;
+-- Resultado: sede 2, curso 3, participante 4, inscripcion 7 (coincide con lo esperado)
+
+-- Queja resuelta en el esquema nuevo
+SELECT c.cod_curso, c.nombre_curso, sum(i.valor_pagado) AS recaudado
+FROM inscripcion i
+JOIN curso c ON c.cod_curso = i.cod_curso
+GROUP BY c.cod_curso, c.nombre_curso
+ORDER BY c.cod_curso;
+-- Resultado: C20 Fotografia digital = 380000
+
+-- No se perdio ningun dato
+SELECT doc_participante, nombre_participante, correo, cod_curso,
+       nombre_curso, cod_sede, direccion_sede, valor_pagado
+FROM inscripcion_vieja
+EXCEPT
+SELECT p.doc_participante, p.nombre_participante, p.correo, c.cod_curso,
+       c.nombre_curso, s.cod_sede, s.direccion_sede, i.valor_pagado
+FROM inscripcion i
+JOIN participante p ON p.doc_participante = i.doc_participante
+JOIN curso c        ON c.cod_curso = i.cod_curso
+JOIN sede s         ON s.cod_sede = c.cod_sede;
+-- Resultado: 0 filas
+
+-- No se invento ningun dato
+SELECT p.doc_participante, p.nombre_participante, p.correo, c.cod_curso,
+       c.nombre_curso, s.cod_sede, s.direccion_sede, i.valor_pagado
+FROM inscripcion i
+JOIN participante p ON p.doc_participante = i.doc_participante
+JOIN curso c        ON c.cod_curso = i.cod_curso
+JOIN sede s         ON s.cod_sede = c.cod_sede
+EXCEPT
+SELECT doc_participante, nombre_participante, correo, cod_curso,
+       nombre_curso, cod_sede, direccion_sede, valor_pagado
+FROM inscripcion_vieja;
+-- Resultado: 0 filas
+
+DROP TABLE inscripcion_vieja;
+
+COMMIT;
+
+-- Pregunta propia
+-- La tabla tiene una PK de una sola columna (id), pero eso no la pone en 2FN.
+-- Las formas normales se evaluan sobre TODAS las claves candidatas, no solo la PK
+-- declarada. Por la regla del negocio, (doc_participante, cod_curso) tambien
+-- identifica una inscripcion, asi que es clave candidata aunque nadie la haya
+-- declarado. Respecto a ella, doc_participante -> nombre, correo y
+-- cod_curso -> nombre_curso, cod_sede son dependencias parciales: no esta en 2FN.
+-- Agregar un id no normaliza nada; solo cambia el nombre de la PK.
+--
+-- Al diseno original le faltaba UNIQUE (doc_participante, cod_curso). Con esa
+-- restriccion, la segunda inscripcion de Juliana Rey en C20 habria sido rechazada
+-- y contabilidad no habria contado 200000 de mas.
 
 
 
 -- ===========================================================
 -- Caso 4 - envios
 -- ===========================================================
-
 
 -- La evidencia (b) de las consultas ya ejecutadas se conserva aparte en evidencias/S19-caso4-envios.txt.
 

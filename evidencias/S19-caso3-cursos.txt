@@ -1,0 +1,139 @@
+﻿SET search_path TO cursos_libres;
+SET
+SELECT doc_participante, cod_curso, count(*) AS veces
+FROM inscripcion
+GROUP BY doc_participante, cod_curso
+HAVING count(*) > 1;
+ doc_participante | cod_curso | veces 
+------------------+-----------+-------
+ 1140000900       | C20       |     2
+(1 row)
+
+SELECT cod_curso, nombre_curso, sum(valor_pagado) AS recaudado
+FROM inscripcion
+GROUP BY cod_curso, nombre_curso
+ORDER BY cod_curso;
+ cod_curso |    nombre_curso    | recaudado 
+-----------+--------------------+-----------
+ C10       | Guitarra básica    |    450000
+ C20       | Fotografía digital |    580000
+ C30       | Cerámica           |    340000
+(3 rows)
+
+SELECT doc_participante, nombre_participante, count(*) AS veces
+FROM inscripcion
+GROUP BY doc_participante, nombre_participante
+ORDER BY veces DESC;
+ doc_participante | nombre_participante | veces 
+------------------+---------------------+-------
+ 1140000900       | Juliana Rey         |     3
+ 1140000902       | Valeria Ospina      |     2
+ 1140000901       | Mateo Gil           |     2
+ 1140000903       | Esteban Cruz        |     1
+(4 rows)
+
+SELECT cod_sede, direccion_sede, count(*) AS veces
+FROM inscripcion
+GROUP BY cod_sede, direccion_sede;
+ cod_sede | direccion_sede | veces 
+----------+----------------+-------
+ S2       | Av 6N # 25-40  |     3
+ S1       | Cra 5 # 10-20  |     5
+(2 rows)
+
+BEGIN;
+BEGIN
+ALTER TABLE inscripcion RENAME TO inscripcion_vieja;
+ALTER TABLE
+CREATE TABLE sede (
+    cod_sede        char(2)     PRIMARY KEY,
+    direccion_sede  varchar(60) NOT NULL
+);
+CREATE TABLE
+CREATE TABLE curso (
+    cod_curso     char(3)     PRIMARY KEY,
+    nombre_curso  varchar(60) NOT NULL,
+    cod_sede      char(2)     NOT NULL REFERENCES sede
+);
+CREATE TABLE
+CREATE TABLE participante (
+    doc_participante     varchar(15)  PRIMARY KEY,
+    nombre_participante  varchar(80)  NOT NULL,
+    correo               varchar(120) NOT NULL UNIQUE
+);
+CREATE TABLE
+CREATE TABLE inscripcion (
+    doc_participante  varchar(15) NOT NULL REFERENCES participante,
+    cod_curso         char(3)     NOT NULL REFERENCES curso,
+    valor_pagado      integer     NOT NULL,
+    PRIMARY KEY (doc_participante, cod_curso)
+);
+CREATE TABLE
+INSERT INTO sede
+SELECT DISTINCT cod_sede, direccion_sede FROM inscripcion_vieja;
+INSERT 0 2
+INSERT INTO curso
+SELECT DISTINCT cod_curso, nombre_curso, cod_sede FROM inscripcion_vieja;
+INSERT 0 3
+INSERT INTO participante
+SELECT DISTINCT doc_participante, nombre_participante, correo FROM inscripcion_vieja;
+INSERT 0 4
+INSERT INTO inscripcion
+SELECT DISTINCT doc_participante, cod_curso, valor_pagado FROM inscripcion_vieja;
+INSERT 0 7
+SELECT 'sede' AS tabla, count(*) FROM sede
+UNION ALL SELECT 'curso', count(*) FROM curso
+UNION ALL SELECT 'participante', count(*) FROM participante
+UNION ALL SELECT 'inscripcion', count(*) FROM inscripcion;
+    tabla     | count 
+--------------+-------
+ sede         |     2
+ curso        |     3
+ participante |     4
+ inscripcion  |     7
+(4 rows)
+
+SELECT c.cod_curso, c.nombre_curso, sum(i.valor_pagado) AS recaudado
+FROM inscripcion i
+JOIN curso c ON c.cod_curso = i.cod_curso
+GROUP BY c.cod_curso, c.nombre_curso
+ORDER BY c.cod_curso;
+ cod_curso |    nombre_curso    | recaudado 
+-----------+--------------------+-----------
+ C10       | Guitarra básica    |    450000
+ C20       | Fotografía digital |    380000
+ C30       | Cerámica           |    340000
+(3 rows)
+
+SELECT doc_participante, nombre_participante, correo, cod_curso,
+       nombre_curso, cod_sede, direccion_sede, valor_pagado
+FROM inscripcion_vieja
+EXCEPT
+SELECT p.doc_participante, p.nombre_participante, p.correo, c.cod_curso,
+       c.nombre_curso, s.cod_sede, s.direccion_sede, i.valor_pagado
+FROM inscripcion i
+JOIN participante p ON p.doc_participante = i.doc_participante
+JOIN curso c        ON c.cod_curso = i.cod_curso
+JOIN sede s         ON s.cod_sede = c.cod_sede;
+ doc_participante | nombre_participante | correo | cod_curso | nombre_curso | cod_sede | direccion_sede | valor_pagado 
+------------------+---------------------+--------+-----------+--------------+----------+----------------+--------------
+(0 rows)
+
+SELECT p.doc_participante, p.nombre_participante, p.correo, c.cod_curso,
+       c.nombre_curso, s.cod_sede, s.direccion_sede, i.valor_pagado
+FROM inscripcion i
+JOIN participante p ON p.doc_participante = i.doc_participante
+JOIN curso c        ON c.cod_curso = i.cod_curso
+JOIN sede s         ON s.cod_sede = c.cod_sede
+EXCEPT
+SELECT doc_participante, nombre_participante, correo, cod_curso,
+       nombre_curso, cod_sede, direccion_sede, valor_pagado
+FROM inscripcion_vieja;
+ doc_participante | nombre_participante | correo | cod_curso | nombre_curso | cod_sede | direccion_sede | valor_pagado 
+------------------+---------------------+--------+-----------+--------------+----------+----------------+--------------
+(0 rows)
+
+DROP TABLE inscripcion_vieja;
+DROP TABLE
+COMMIT;
+COMMIT
