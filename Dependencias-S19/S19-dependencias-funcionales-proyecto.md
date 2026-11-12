@@ -30,9 +30,9 @@ siempre se cumple.
 
 | Tabla | Claves candidatas declaradas | Dependencias funcionales y regla que las justifica |
 |---|---|---|
-| `usuarios` | `id_usuario`; `documento`; `correo` | `id_usuario → documento, nombres, apellidos, correo, telefono, rol, usuario_activo, id_administrador, rol_administrador` (**DDL:** PK). `documento →` esos mismos atributos (**DDL:** `UNIQUE NOT NULL`). `correo →` esos mismos atributos (**DDL:** `UNIQUE NOT NULL`). La dependencia desde `documento` y `correo` implica que, según el diseño actual, una persona no puede tener más de un registro/rol. Si el negocio permite que una persona tenga varios roles, hay que revisar ese diseño antes de dar por válida esta regla. |
+| `usuarios` | `id_usuario`; `documento`; `correo` | `id_usuario → documento, nombres, apellidos, correo, telefono, rol, usuario_activo, id_administrador, rol_administrador` (**DDL:** PK). `documento →` esos mismos atributos (**DDL:** `UNIQUE NOT NULL`). `correo →` esos mismos atributos (**DDL:** `UNIQUE NOT NULL`). Para este proyecto se adopta la regla de un registro y un rol por persona; si el requisito cambia, habrá que revisar ese diseño. |
 | `categorias` | `id_categoria`; `genero` | `id_categoria → genero` (**DDL:** PK). `genero → id_categoria` (**DDL:** `UNIQUE NOT NULL`; el nombre del género identifica una categoría). |
-| `autor` | `id_autor`; `nombre_autor` | `id_autor → nombre_autor` (**DDL:** PK). `nombre_autor → id_autor` (**DDL:** `UNIQUE NOT NULL`; el esquema trata el nombre como único). Confirmar si dos autores homónimos deben poder registrarse por separado; si sí, `nombre_autor` no debería ser clave candidata por sí solo. |
+| `autor` | `id_autor`; `nombre_autor` | `id_autor → nombre_autor` (**DDL:** PK). `nombre_autor → id_autor` (**DDL:** `UNIQUE NOT NULL`; el proyecto adopta el nombre como identificador único del autor). |
 | `libros` | `isbn` | `isbn → id_categoria, id_autor, titulo, editorial, anio_publicacion, libro_activo` (**DDL:** `isbn` es PK). El diseño asume que cada ISBN identifica un registro de libro y sus datos de catálogo. Un autor o una categoría pueden aparecer en varios libros, así que `id_autor` y `id_categoria` no determinan `isbn`. |
 | `ejemplares` | `(isbn, id_ejemplar)` | `(isbn, id_ejemplar) → estado` (**DDL:** PK compuesta). `id_ejemplar` es el número de copia dentro de un libro, no un identificador global; por eso no determina por sí solo una fila. |
 | `prestamos` | `(id_lector, isbn, id_ejemplar, fecha_hora_prestamo)` | `(id_lector, isbn, id_ejemplar, fecha_hora_prestamo) → id_bibliotecario, fecha_vencimiento, fecha_devolucion` (**DDL:** PK compuesta). La regla permite que el mismo lector solicite el mismo ejemplar en ocasiones distintas; por eso la fecha y hora forma parte de la clave. La unicidad parcial de `(isbn, id_ejemplar)` cuando `fecha_devolucion IS NULL` solo impide dos préstamos abiertos simultáneos de una copia: no es una dependencia funcional incondicional para todo el historial. |
@@ -48,11 +48,12 @@ siempre se cumple.
    candidatas.
 3. Las columnas `rol_lector`, `rol_bibliotecario` y `rol_administrador` son
    generadas para validar roles en las FKs. No son identificadores de filas.
-4. El esquema tiene PK para los ejemplares, pero no declara que
-   `ejemplares.estado = 'disponible'` equivalga a “no tiene un préstamo abierto”.
-   Si esa equivalencia es una regla del proyecto, debe verificarse y mantenerse
-   explícitamente; no se debe asumir como dependencia funcional a partir del
-   DDL actual.
+4. Para este proyecto se adopta que `ejemplares.estado = 'prestado'`
+   corresponde exactamente a la existencia de un préstamo abierto para ese
+   ejemplar. Es una regla de consistencia entre `ejemplares` y `prestamos`, no
+   una dependencia funcional dentro de `ejemplares`; el DDL no la impone y debe
+   mantenerse al registrar o cerrar un préstamo. Los estados `disponible`,
+   `en_mantenimiento` y `perdido` aplican cuando no existe un préstamo abierto.
 
 ## Tablas técnicas de carga: esquema `carga`
 

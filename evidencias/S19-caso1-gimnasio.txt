@@ -1,3 +1,16 @@
+
+Salida de psql sobre los datos iniciales del esquema gimnasio.
+
+curso=# SET search_path TO gimnasio;
+SET
+
+curso=# SELECT 'Yoga' AS clase, COUNT(*) AS socios
+FROM socio
+WHERE clases LIKE '%Yoga%'
+UNION ALL
+SELECT 'Spinning', COUNT(*)
+FROM socio
+WHERE clases LIKE '%Spinning%';
 # Evidencia S19 - Caso 1: gimnasio
 
 Salida de consultas SQL ejecutadas sobre PostgreSQL, base de datos `curso`.
