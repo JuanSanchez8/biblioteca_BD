@@ -1,0 +1,53 @@
+Evidencia S19 - Caso 1: gimnasio
+================================
+
+Salida de psql sobre los datos iniciales del esquema gimnasio.
+
+curso=# SET search_path TO gimnasio;
+SET
+
+curso=# SELECT 'Yoga' AS clase, COUNT(*) AS socios
+FROM socio
+WHERE clases LIKE '%Yoga%'
+UNION ALL
+SELECT 'Spinning', COUNT(*)
+FROM socio
+WHERE clases LIKE '%Spinning%';
+  clase   | socios
+----------+--------
+ Yoga     |      2
+ Spinning |      3
+(2 rows)
+
+curso=# SELECT INITCAP(LOWER(TRIM(c.clase))) AS clase,
+COUNT(*) AS total_socios
+FROM socio s
+CROSS JOIN LATERAL string_to_table(s.clases, ';') AS c(clase)
+GROUP BY LOWER(TRIM(c.clase))
+ORDER BY clase;
+       clase       | total_socios
+-------------------+--------------
+ Funcional         |            2
+ Pilates           |            1
+ Spinning          |            2
+ Spinning Avanzado |            1
+ Yoga              |            3
+(5 rows)
+
+curso=# SELECT plan, valor_plan, COUNT(*) AS total_socios
+FROM socio
+GROUP BY plan, valor_plan
+ORDER BY plan;
+    plan    | valor_plan | total_socios
+------------+------------+--------------
+ Anual      |     850000 |            2
+ Mensual    |      90000 |            3
+ Trimestral |     240000 |            1
+(3 rows)
+
+Lectura de la evidencia:
+- El filtro con LIKE cuenta incorrectamente: encuentra 2 socios para Yoga y 3
+  para Spinning. Al separar y normalizar los nombres, los conteos correctos son
+  3 para Yoga y 2 para Spinning.
+- Los valores de los planes se repiten entre socios: Anual aparece 2 veces,
+  Mensual 3 y Trimestral 1.

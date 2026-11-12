@@ -632,8 +632,22 @@ COMMIT;
 -- vigente deberia definirse una sola vez por zona. Esto es un problema de diseno / normalizacion (3FN) si se considera tarifa_kg un dato 
 -- de la zona.
 
--- (b) La evidencia de datos esta en evidencias/S19-caso4-envios.txt. Sus consultas comprueban estos registros de prueba; las reglas de negocio
--- se justifican con el enunciado, no solo con la ausencia de contradicciones en los datos.
+-- (b) EVIDENCIA
+SET search_path TO envios;
+
+-- El valor guardado para G07 no coincide con peso x tarifa.
+SELECT num_guia, peso_kg, tarifa_kg, valor,
+       peso_kg * tarifa_kg AS valor_calculado
+FROM envio
+WHERE valor::numeric <> peso_kg * tarifa_kg;
+-- Resultado: G07 | 4.0 | 6000 | 42000 | 24000.0
+
+-- La tarifa de cada zona se repite en los envios de esa zona.
+SELECT zona, tarifa_kg, count(*) AS envios_con_esa_tarifa
+FROM envio
+GROUP BY zona, tarifa_kg
+ORDER BY zona;
+-- Resultado: zona 1 | 4000 | 3; zona 2 | 6000 | 4; zona 3 | 9000 | 1.
 
 -- (c) Esquema corregido
 --
@@ -738,8 +752,6 @@ JOIN ciudad AS c
   ON c.nombre = e.ciudad_destino
  AND c.id_departamento = d.id_departamento
 ORDER BY e.num_guia;
-
-------- IA
 
 -- Conteos esperados con los datos del script S19: 4, 3, 5 y 8.
 SELECT 'departamento' AS tabla, count(*) AS filas FROM departamento
