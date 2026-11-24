@@ -149,3 +149,16 @@ docker compose exec postgres psql -U curso -d curso -P pager=off -f /tmp/S19-cas
 
 `casos.sql` incluye la evidencia, migraciones y verificaciones de los cuatro
 casos. La revisión del esquema Biblioteca está en `entregas\S19\parte-b.md`.
+
+## 6. S22 (reservas, procedimientos y triggers)
+
+Con PostgreSQL en ejecución, preparar el esquema de reservas y luego ejecutar
+el SQL de la parte A:
+
+```
+docker compose exec postgres psql -U curso -d curso -f /scripts/S22-reservas.sql
+docker compose exec postgres psql -U curso -d curso -f /scripts/S22-grupo.sql
+```
+
+Las respuestas de la parte A están en
+[`entregas/S22/respuestas-parte-a.md`](entregas/S22/respuestas-parte-a.md).
