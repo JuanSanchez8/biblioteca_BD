@@ -1,4 +1,4 @@
-﻿   tabla    | registros 
+   tabla    | registros 
 ------------+-----------
  usuarios   |        21
  libros     |        32
