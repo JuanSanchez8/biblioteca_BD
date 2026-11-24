@@ -1,0 +1,425 @@
+SET search_path TO reservas;
+SET
+ALTER TABLE reserva
+    ADD CONSTRAINT reserva_orden      CHECK (fin > inicio),
+    ADD CONSTRAINT reserva_duracion   CHECK (fin - inicio <= interval '3 hours'),
+    ADD CONSTRAINT reserva_horario    CHECK (inicio::date = fin::date
+                                             AND inicio::time >= time '07:00'
+                                             AND fin::time    <= time '21:00'),
+    ADD CONSTRAINT reserva_asistentes CHECK (asistentes > 0);
+ALTER TABLE
+ALTER TABLE sala_recurso
+    DROP CONSTRAINT sala_recurso_id_sala_fkey,
+    ADD CONSTRAINT sala_recurso_id_sala_fkey
+        FOREIGN KEY (id_sala) REFERENCES sala ON DELETE CASCADE;
+ALTER TABLE
+ALTER TABLE reserva
+    DROP CONSTRAINT reserva_id_sala_fkey,
+    ADD CONSTRAINT reserva_id_sala_fkey
+        FOREIGN KEY (id_sala) REFERENCES sala ON DELETE RESTRICT;
+ALTER TABLE
+ALTER TABLE reserva
+    DROP CONSTRAINT reserva_codigo_fkey,
+    ADD CONSTRAINT reserva_codigo_fkey
+        FOREIGN KEY (codigo) REFERENCES estudiante ON DELETE RESTRICT;
+ALTER TABLE
+INSERT INTO reserva (id_sala, codigo, inicio, fin, asistentes)
+VALUES (1, '2610006', dia(4) + time '10:00', dia(4) + time '09:00', 2);
+psql:/scripts/S22-grupo.sql:46: ERROR:  new row for relation "reserva" violates check constraint "reserva_orden"
+DETAIL:  Failing row contains (10, 1, 2610006, 2026-12-03 10:00:00, 2026-12-03 09:00:00, 2, activa).
+INSERT INTO reserva (id_sala, codigo, inicio, fin, asistentes)
+VALUES (1, '2610006', dia(4) + time '08:00', dia(4) + time '12:00', 2);
+psql:/scripts/S22-grupo.sql:48: ERROR:  new row for relation "reserva" violates check constraint "reserva_duracion"
+DETAIL:  Failing row contains (11, 1, 2610006, 2026-12-03 08:00:00, 2026-12-03 12:00:00, 2, activa).
+INSERT INTO reserva (id_sala, codigo, inicio, fin, asistentes)
+VALUES (1, '2610006', dia(4) + time '20:00', dia(4) + time '22:00', 2);
+psql:/scripts/S22-grupo.sql:50: ERROR:  new row for relation "reserva" violates check constraint "reserva_horario"
+DETAIL:  Failing row contains (12, 1, 2610006, 2026-12-03 20:00:00, 2026-12-03 22:00:00, 2, activa).
+INSERT INTO reserva (id_sala, codigo, inicio, fin, asistentes)
+VALUES (1, '2610006', dia(4) + time '10:00', dia(4) + time '11:00', 0);
+psql:/scripts/S22-grupo.sql:52: ERROR:  new row for relation "reserva" violates check constraint "reserva_asistentes"
+DETAIL:  Failing row contains (13, 1, 2610006, 2026-12-03 10:00:00, 2026-12-03 11:00:00, 0, activa).
+BEGIN;
+BEGIN
+DELETE FROM sala WHERE id_sala = 4;
+DELETE 1
+SELECT count(*) FROM sala_recurso WHERE id_sala = 4;
+ count 
+-------
+     0
+(1 row)
+
+ROLLBACK;
+ROLLBACK
+DELETE FROM sala WHERE id_sala = 1;
+psql:/scripts/S22-grupo.sql:58: ERROR:  update or delete on table "sala" violates foreign key constraint "reserva_id_sala_fkey" on table "reserva"
+DETAIL:  Key (id_sala)=(1) is still referenced from table "reserva".
+BEGIN;
+BEGIN
+INSERT INTO reserva (id_sala, codigo, inicio, fin, asistentes)
+VALUES (1, '2610006', dia(1) + time '09:00', dia(1) + time '10:00', 9);
+INSERT 0 1
+ROLLBACK;
+ROLLBACK
+CREATE OR REPLACE FUNCTION horas_semana(p_codigo varchar, p_dia date)
+RETURNS numeric
+LANGUAGE sql STABLE
+AS $$
+    SELECT round(coalesce(sum(extract(epoch FROM fin - inicio)) / 3600, 0), 1)
+    FROM   reserva
+    WHERE  codigo = p_codigo
+      AND  estado <> 'cancelada'
+      AND  date_trunc('week', inicio) = date_trunc('week', p_dia::timestamp);
+$$;
+CREATE FUNCTION
+CREATE OR REPLACE FUNCTION sala_libre(p_sala integer, p_inicio timestamp, p_fin timestamp,
+                                      p_excluir integer DEFAULT NULL)
+RETURNS boolean
+LANGUAGE sql STABLE
+AS $$
+    SELECT NOT EXISTS (
+        SELECT 1
+        FROM   reserva
+        WHERE  id_sala = p_sala
+          AND  estado = 'activa'
+          AND  inicio < p_fin
+          AND  p_inicio < fin
+          AND  (p_excluir IS NULL OR id <> p_excluir)
+    );
+$$;
+CREATE FUNCTION
+SELECT codigo, horas_semana(codigo, dia(1))   AS proxima,
+               horas_semana(codigo, dia(-13)) AS pasada
+FROM   estudiante ORDER BY codigo;
+ codigo  | proxima | pasada 
+---------+---------+--------
+ 2610001 |     5.0 |    0.0
+ 2610002 |     2.0 |    2.0
+ 2610003 |     3.0 |    2.0
+ 2610004 |     2.0 |    0.0
+ 2610005 |     0.0 |    0.0
+ 2610006 |     0.0 |    2.0
+(6 rows)
+
+SELECT sala_libre(1, dia(1) + time '09:00', dia(1) + time '11:00')    AS a,   -- f
+       sala_libre(1, dia(1) + time '12:00', dia(1) + time '14:00')    AS b,   -- t
+       sala_libre(2, dia(3) + time '08:00', dia(3) + time '10:00')    AS c,   -- t
+       sala_libre(1, dia(1) + time '08:00', dia(1) + time '10:00', 1) AS d;
+ a | b | c | d 
+---+---+---+---
+ f | t | t | t
+(1 row)
+
+CREATE OR REPLACE PROCEDURE reservar(p_codigo varchar, p_sala integer,
+                                     p_inicio timestamp, p_fin timestamp,
+                                     p_asistentes integer)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_sancion    date;
+    v_capacidad  integer;
+    v_activa     boolean;
+    v_horas      numeric;
+    v_duracion   numeric;
+    v_id         integer;
+BEGIN
+    -- El estudiante existe
+    SELECT sancionado_hasta INTO v_sancion FROM estudiante WHERE codigo = p_codigo;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'El estudiante % no existe', p_codigo;
+    END IF;
+
+    -- Regla 5: un estudiante sancionado no puede reservar
+    IF v_sancion IS NOT NULL AND v_sancion >= CURRENT_DATE THEN
+        RAISE EXCEPTION 'El estudiante % esta sancionado hasta el %', p_codigo, v_sancion;
+    END IF;
+
+    -- La sala existe
+    SELECT capacidad, activa INTO v_capacidad, v_activa FROM sala WHERE id_sala = p_sala;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'La sala % no existe', p_sala;
+    END IF;
+
+    -- Regla 2: sala en mantenimiento y capacidad
+    IF NOT v_activa THEN
+        RAISE EXCEPTION 'La sala % esta en mantenimiento', p_sala;
+    END IF;
+    IF p_asistentes > v_capacidad THEN
+        RAISE EXCEPTION 'La sala % tiene capacidad para %, no para % asistentes',
+                        p_sala, v_capacidad, p_asistentes;
+    END IF;
+
+    -- Regla 3: la sala no puede tener otra reserva activa que se cruce
+    IF NOT sala_libre(p_sala, p_inicio, p_fin) THEN
+        RAISE EXCEPTION 'La sala % ya esta ocupada entre % y %', p_sala, p_inicio, p_fin;
+    END IF;
+
+    -- Regla 4: maximo 6 horas por semana
+    v_horas    := horas_semana(p_codigo, p_inicio::date);
+    v_duracion := extract(epoch FROM p_fin - p_inicio) / 3600;
+    IF v_horas + v_duracion > 6 THEN
+        RAISE EXCEPTION 'El estudiante % lleva % horas esta semana; con esta reserva tendria % (maximo 6)',
+                        p_codigo, v_horas, round(v_horas + v_duracion, 1);
+    END IF;
+
+    INSERT INTO reserva (id_sala, codigo, inicio, fin, asistentes)
+    VALUES (p_sala, p_codigo, p_inicio, p_fin, p_asistentes)
+    RETURNING id INTO v_id;
+
+    RAISE NOTICE 'Reserva % creada', v_id;
+END;
+$$;
+CREATE PROCEDURE
+CREATE OR REPLACE PROCEDURE cancelar(p_id integer)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_estado  varchar;
+    v_inicio  timestamp;
+BEGIN
+    SELECT estado, inicio INTO v_estado, v_inicio FROM reserva WHERE id = p_id;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'La reserva % no existe', p_id;
+    END IF;
+    IF v_estado <> 'activa' THEN
+        RAISE EXCEPTION 'La reserva % no esta activa (estado: %)', p_id, v_estado;
+    END IF;
+    IF v_inicio <= now() THEN
+        RAISE EXCEPTION 'La reserva % ya empezo (%) y no se puede cancelar', p_id, v_inicio;
+    END IF;
+
+    UPDATE reserva SET estado = 'cancelada' WHERE id = p_id;
+    RAISE NOTICE 'Reserva % cancelada', p_id;
+END;
+$$;
+CREATE PROCEDURE
+CALL reservar('2610005', 1, dia(4) + time '08:00', dia(4) + time '10:00', 2);
+psql:/scripts/S22-grupo.sql:202: ERROR:  El estudiante 2610005 esta sancionado hasta el 2026-12-24
+CONTEXT:  PL/pgSQL function reservar(character varying,integer,timestamp without time zone,timestamp without time zone,integer) line 18 at RAISE
+CALL reservar('2610006', 4, dia(4) + time '08:00', dia(4) + time '10:00', 2);
+psql:/scripts/S22-grupo.sql:203: ERROR:  La sala 4 esta en mantenimiento
+CONTEXT:  PL/pgSQL function reservar(character varying,integer,timestamp without time zone,timestamp without time zone,integer) line 29 at RAISE
+CALL reservar('2610006', 1, dia(4) + time '08:00', dia(4) + time '10:00', 5);
+psql:/scripts/S22-grupo.sql:204: ERROR:  La sala 1 tiene capacidad para 4, no para 5 asistentes
+CONTEXT:  PL/pgSQL function reservar(character varying,integer,timestamp without time zone,timestamp without time zone,integer) line 32 at RAISE
+CALL reservar('2610006', 1, dia(1) + time '09:00', dia(1) + time '11:00', 2);
+psql:/scripts/S22-grupo.sql:205: ERROR:  La sala 1 ya esta ocupada entre 2026-11-30 09:00:00 y 2026-11-30 11:00:00
+CONTEXT:  PL/pgSQL function reservar(character varying,integer,timestamp without time zone,timestamp without time zone,integer) line 38 at RAISE
+CALL reservar('2610001', 2, dia(4) + time '08:00', dia(4) + time '10:00', 3);
+psql:/scripts/S22-grupo.sql:206: ERROR:  El estudiante 2610001 lleva 5.0 horas esta semana; con esta reserva tendria 7.0 (maximo 6)
+CONTEXT:  PL/pgSQL function reservar(character varying,integer,timestamp without time zone,timestamp without time zone,integer) line 45 at RAISE
+CALL reservar('2610006', 1, dia(1) + time '12:00', dia(1) + time '14:00', 3);
+psql:/scripts/S22-grupo.sql:207: NOTICE:  Reserva 15 creada
+CALL
+CALL reservar('2610004', 2, dia(3) + time '08:00', dia(3) + time '10:00', 4);
+psql:/scripts/S22-grupo.sql:208: NOTICE:  Reserva 16 creada
+CALL
+CALL reservar('2610001', 2, dia(4) + time '08:00', dia(4) + time '09:00', 3);
+psql:/scripts/S22-grupo.sql:209: NOTICE:  Reserva 17 creada
+CALL
+CALL reservar('2610099', 2, dia(4) + time '08:00', dia(4) + time '09:00', 3);
+psql:/scripts/S22-grupo.sql:210: ERROR:  El estudiante 2610099 no existe
+CONTEXT:  PL/pgSQL function reservar(character varying,integer,timestamp without time zone,timestamp without time zone,integer) line 13 at RAISE
+CALL cancelar(7);
+psql:/scripts/S22-grupo.sql:211: ERROR:  La reserva 7 no esta activa (estado: cumplida)
+CONTEXT:  PL/pgSQL function cancelar(integer) line 11 at RAISE
+CALL cancelar(2);
+psql:/scripts/S22-grupo.sql:212: NOTICE:  Reserva 2 cancelada
+CALL
+SELECT * FROM agenda;
+ id |  sala  | estudiante |     inicio      |  fin  | asistentes |   estado   
+----+--------+------------+-----------------+-------+------------+------------
+  7 | Sala A | Felipe     | Mon 16/11 08:00 | 10:00 |          2 | cumplida
+  8 | Sala B | Bruno      | Tue 17/11 14:00 | 16:00 |          3 | no_asistio
+  9 | Sala C | Carla      | Wed 18/11 10:00 | 12:00 |          6 | activa
+  1 | Sala A | Ana        | Mon 30/11 08:00 | 10:00 |          3 | activa
+  2 | Sala A | Bruno      | Mon 30/11 10:00 | 12:00 |          2 | cancelada
+ 15 | Sala A | Felipe     | Mon 30/11 12:00 | 14:00 |          3 | activa
+  3 | Sala B | Carla      | Mon 30/11 14:00 | 17:00 |          5 | activa
+  4 | Sala C | Ana        | Tue 01/12 09:00 | 12:00 |          8 | activa
+ 16 | Sala B | Diego      | Wed 02/12 08:00 | 10:00 |          4 | activa
+  5 | Sala B | Diego      | Wed 02/12 08:00 | 10:00 |          4 | cancelada
+  6 | Sala B | Diego      | Wed 02/12 10:00 | 12:00 |          4 | activa
+ 17 | Sala B | Ana        | Thu 03/12 08:00 | 09:00 |          3 | activa
+(12 rows)
+
+BEGIN;
+BEGIN
+INSERT INTO reserva (id_sala, codigo, inicio, fin, asistentes)
+VALUES (3, '2610005', dia(2) + time '10:00', dia(2) + time '11:00', 12);
+INSERT 0 1
+ROLLBACK;
+ROLLBACK
+CREATE OR REPLACE FUNCTION validar_reserva()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_capacidad  integer;
+    v_activa     boolean;
+BEGIN
+    IF NEW.estado <> 'activa' THEN
+        RETURN NEW;                          -- canceladas, cumplidas, no_asistio: no se validan
+    END IF;
+
+    SELECT capacidad, activa INTO v_capacidad, v_activa FROM sala WHERE id_sala = NEW.id_sala;
+
+    -- Regla 2
+    IF NOT v_activa THEN
+        RAISE EXCEPTION 'La sala % esta en mantenimiento', NEW.id_sala;
+    END IF;
+    IF NEW.asistentes > v_capacidad THEN
+        RAISE EXCEPTION 'La sala % tiene capacidad para %, no para % asistentes',
+                        NEW.id_sala, v_capacidad, NEW.asistentes;
+    END IF;
+
+    -- Regla 3 (se excluye la propia reserva para que un UPDATE no choque consigo misma)
+    IF NOT sala_libre(NEW.id_sala, NEW.inicio, NEW.fin, NEW.id) THEN
+        RAISE EXCEPTION 'La sala % ya esta ocupada entre % y %', NEW.id_sala, NEW.inicio, NEW.fin;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION
+DROP TRIGGER IF EXISTS reserva_validar ON reserva;
+psql:/scripts/S22-grupo.sql:259: NOTICE:  trigger "reserva_validar" for relation "reserva" does not exist, skipping
+DROP TRIGGER
+CREATE TRIGGER reserva_validar
+    BEFORE INSERT OR UPDATE ON reserva
+    FOR EACH ROW
+    EXECUTE FUNCTION validar_reserva();
+CREATE TRIGGER
+INSERT INTO reserva (id_sala, codigo, inicio, fin, asistentes)
+VALUES (3, '2610005', dia(2) + time '10:00', dia(2) + time '11:00', 12);
+psql:/scripts/S22-grupo.sql:267: ERROR:  La sala 3 tiene capacidad para 10, no para 12 asistentes
+CONTEXT:  PL/pgSQL function validar_reserva() line 17 at RAISE
+INSERT INTO reserva (id_sala, codigo, inicio, fin, asistentes)
+VALUES (3, '2610005', dia(2) + time '10:00', dia(2) + time '11:00', 6);
+psql:/scripts/S22-grupo.sql:269: ERROR:  La sala 3 ya esta ocupada entre 2026-12-01 10:00:00 y 2026-12-01 11:00:00
+CONTEXT:  PL/pgSQL function validar_reserva() line 23 at RAISE
+UPDATE reserva SET inicio = dia(3) + time '09:00' WHERE id = 6;
+psql:/scripts/S22-grupo.sql:270: ERROR:  La sala 2 ya esta ocupada entre 2026-12-02 09:00:00 y 2026-12-02 12:00:00
+CONTEXT:  PL/pgSQL function validar_reserva() line 23 at RAISE
+UPDATE reserva SET asistentes = 5 WHERE id = 6;
+UPDATE 1
+UPDATE reserva SET estado = 'activa' WHERE id = 5;
+psql:/scripts/S22-grupo.sql:272: ERROR:  La sala 2 ya esta ocupada entre 2026-12-02 08:00:00 y 2026-12-02 10:00:00
+CONTEXT:  PL/pgSQL function validar_reserva() line 23 at RAISE
+CREATE OR REPLACE FUNCTION sancionar_inasistencia()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    UPDATE estudiante
+    SET    sancionado_hasta = CURRENT_DATE + 7
+    WHERE  codigo = NEW.codigo;
+    RETURN NULL;                             -- AFTER: el valor de retorno se ignora
+END;
+$$;
+CREATE FUNCTION
+DROP TRIGGER IF EXISTS reserva_sancionar ON reserva;
+psql:/scripts/S22-grupo.sql:291: NOTICE:  trigger "reserva_sancionar" for relation "reserva" does not exist, skipping
+DROP TRIGGER
+CREATE TRIGGER reserva_sancionar
+    AFTER UPDATE OF estado ON reserva
+    FOR EACH ROW
+    WHEN (NEW.estado = 'no_asistio' AND OLD.estado <> 'no_asistio')
+    EXECUTE FUNCTION sancionar_inasistencia();
+CREATE TRIGGER
+UPDATE reserva SET estado = 'no_asistio' WHERE id = 7;
+UPDATE 1
+SELECT codigo, nombre, sancionado_hasta - CURRENT_DATE AS dias
+FROM   estudiante WHERE sancionado_hasta IS NOT NULL;
+ codigo  | nombre | dias 
+---------+--------+------
+ 2610005 | Elena  |   30
+ 2610006 | Felipe |    7
+(2 rows)
+
+CALL reservar('2610006', 3, dia(5) + time '08:00', dia(5) + time '10:00', 2);
+psql:/scripts/S22-grupo.sql:302: ERROR:  El estudiante 2610006 esta sancionado hasta el 2026-12-01
+CONTEXT:  PL/pgSQL function reservar(character varying,integer,timestamp without time zone,timestamp without time zone,integer) line 18 at RAISE
+UPDATE reserva SET asistentes = 2 WHERE id = 8;
+UPDATE 1
+SELECT codigo, nombre, sancionado_hasta - CURRENT_DATE AS dias
+FROM   estudiante WHERE sancionado_hasta IS NOT NULL;
+ codigo  | nombre | dias 
+---------+--------+------
+ 2610005 | Elena  |   30
+ 2610006 | Felipe |    7
+(2 rows)
+
+CREATE OR REPLACE PROCEDURE cerrar_vencidas_ciclo()
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    r  record;
+BEGIN
+    FOR r IN SELECT id FROM reserva WHERE estado = 'activa' AND fin < now() LOOP
+        UPDATE reserva SET estado = 'cumplida' WHERE id = r.id;
+        RAISE NOTICE 'Reserva % cerrada', r.id;
+    END LOOP;
+END;
+$$;
+CREATE PROCEDURE
+CREATE OR REPLACE PROCEDURE cerrar_vencidas()
+LANGUAGE sql
+AS $$
+    UPDATE reserva
+    SET    estado = 'cumplida'
+    WHERE  estado = 'activa' AND fin < now();
+$$;
+CREATE PROCEDURE
+SELECT id, estado FROM reserva WHERE id = 9;
+ id | estado 
+----+--------
+  9 | activa
+(1 row)
+
+CALL cerrar_vencidas();
+CALL
+SELECT id, estado FROM reserva WHERE id = 9;
+ id |  estado  
+----+----------
+  9 | cumplida
+(1 row)
+
+SELECT * FROM agenda;
+ id |  sala  | estudiante |     inicio      |  fin  | asistentes |   estado   
+----+--------+------------+-----------------+-------+------------+------------
+  7 | Sala A | Felipe     | Mon 16/11 08:00 | 10:00 |          2 | no_asistio
+  8 | Sala B | Bruno      | Tue 17/11 14:00 | 16:00 |          2 | no_asistio
+  9 | Sala C | Carla      | Wed 18/11 10:00 | 12:00 |          6 | cumplida
+  1 | Sala A | Ana        | Mon 30/11 08:00 | 10:00 |          3 | activa
+  2 | Sala A | Bruno      | Mon 30/11 10:00 | 12:00 |          2 | cancelada
+ 15 | Sala A | Felipe     | Mon 30/11 12:00 | 14:00 |          3 | activa
+  3 | Sala B | Carla      | Mon 30/11 14:00 | 17:00 |          5 | activa
+  4 | Sala C | Ana        | Tue 01/12 09:00 | 12:00 |          8 | activa
+  5 | Sala B | Diego      | Wed 02/12 08:00 | 10:00 |          4 | cancelada
+ 16 | Sala B | Diego      | Wed 02/12 08:00 | 10:00 |          4 | activa
+  6 | Sala B | Diego      | Wed 02/12 10:00 | 12:00 |          5 | activa
+ 17 | Sala B | Ana        | Thu 03/12 08:00 | 09:00 |          3 | activa
+(12 rows)
+
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+CREATE EXTENSION
+ALTER TABLE reserva ADD CONSTRAINT reserva_sin_cruce
+    EXCLUDE USING gist (id_sala WITH =, tsrange(inicio, fin) WITH &&)
+    WHERE (estado = 'activa');
+ALTER TABLE
+ALTER TABLE reserva DISABLE TRIGGER reserva_validar;
+ALTER TABLE
+INSERT INTO reserva (id_sala, codigo, inicio, fin, asistentes)
+VALUES (1, '2610003', dia(1) + time '09:00', dia(1) + time '10:00', 2);
+psql:/scripts/S22-grupo.sql:352: ERROR:  conflicting key value violates exclusion constraint "reserva_sin_cruce"
+DETAIL:  Key (id_sala, tsrange(inicio, fin))=(1, ["2026-11-30 09:00:00","2026-11-30 10:00:00")) conflicts with existing key (id_sala, tsrange(inicio, fin))=(1, ["2026-11-30 08:00:00","2026-11-30 10:00:00")).
+BEGIN;
+BEGIN
+INSERT INTO reserva (id_sala, codigo, inicio, fin, asistentes)
+VALUES (1, '2610003', dia(1) + time '15:00', dia(1) + time '16:00', 2);
+INSERT 0 1
+ROLLBACK;
+ROLLBACK
+ALTER TABLE reserva ENABLE TRIGGER reserva_validar;
+ALTER TABLE
