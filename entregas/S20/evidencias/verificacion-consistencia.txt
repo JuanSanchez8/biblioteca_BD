@@ -1,0 +1,4 @@
+﻿ isbn | id_ejemplar | estado 
+------+-------------+--------
+(0 rows)
+

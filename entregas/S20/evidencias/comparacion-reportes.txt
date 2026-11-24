@@ -1,0 +1,30 @@
+﻿
+
+InputObject   :          4 | Juan David | Mart├¡nez Ruiz | juan.martinez@correo-ejemplo.edu.co | 3001000004 | 9780000000018 | Matilda             | 2026-10-25 
+                10:00:00 | 2026-11-08
+SideIndicator : =>
+
+InputObject   :          4 | Juan David | Mart├¡nez Ruiz | juan.martinez@correo-ejemplo.edu.co | 3001000004 | 9780000000028 | Orgullo y prejuicio | 2026-10-30 
+                11:00:00 | 2026-11-13
+SideIndicator : =>
+
+InputObject   : (2 rows)
+SideIndicator : =>
+
+InputObject   :          4 | Juan David | Mart├¡nez Ruiz | juan.martinez@correo-ejemplo.edu.co | 3001000004 | 9780000000018 | Matilda             | 2026-09-30 
+                10:00:00 | 2026-10-14
+SideIndicator : <=
+
+InputObject   :          4 | Juan David | Mart├¡nez Ruiz | juan.martinez@correo-ejemplo.edu.co | 3001000004 | 9780000000028 | Orgullo y prejuicio | 2026-10-05 
+                11:00:00 | 2026-10-19
+SideIndicator : <=
+
+InputObject   :          4 | Juan David | Mart├¡nez Ruiz | juan.martinez@correo-ejemplo.edu.co | 3001000004 | 9780000000027 | Los miserables      | 2026-10-16 
+                12:00:00 | 2026-10-30
+SideIndicator : <=
+
+InputObject   : (3 rows)
+SideIndicator : <=
+
+
+

@@ -1,0 +1,42 @@
+﻿     isbn      |               titulo                | total_prestamos 
+---------------+-------------------------------------+-----------------
+ 9780000000014 | 1984                                |               3
+ 9780000000019 | Alicia en el pa├¡s de las maravillas |               3
+ 9780000000020 | Breve historia del tiempo           |               3
+ 9780000000001 | Cien a├▒os de soledad                |               3
+ 9780000000011 | Como agua para chocolate            |               3
+ 9780000000021 | Cosmos                              |               3
+ 9780000000026 | Crimen y castigo                    |               3
+ 9780000000003 | Cr├│nica de una muerte anunciada     |               3
+ 9780000000009 | Don Quijote de la Mancha            |               3
+ 9780000000029 | Dr├ícula                             |               3
+ 9780000000008 | El Aleph                            |               3
+ 9780000000002 | El amor en los tiempos del c├│lera   |               3
+ 9780000000031 | El nombre del viento                |               3
+ 9780000000023 | El origen de las especies           |               3
+ 9780000000017 | El principito                       |               3
+ 9780000000012 | El t├║nel                            |               3
+ 9780000000016 | Fahrenheit 451                      |               3
+ 9780000000007 | Ficciones                           |               3
+ 9780000000030 | Frankenstein                        |               3
+ 9780000000032 | Harry Potter y la piedra filosofal  |               2
+ 9780000000006 | La casa de los esp├¡ritus            |               2
+(21 rows)
+
+ id_usuario | nombres  |    apellidos    | total_libros_leidos 
+------------+----------+-----------------+---------------------
+          1 | Mariana  | G├│mez Rojas     |                  21
+          2 | Santiago | Rodr├¡guez P├®rez |                  21
+(2 rows)
+
+ id_usuario |  nombres   |   apellidos   |               correo                |  telefono  
+------------+------------+---------------+-------------------------------------+------------
+          4 | Juan David | Mart├¡nez Ruiz | juan.martinez@correo-ejemplo.edu.co | 3001000004
+(1 row)
+
+ id_lector |  nombres   |   apellidos   |               correo                |  telefono  |     isbn      |       titulo        | fecha_hora_prestamo | fecha_vencimiento 
+-----------+------------+---------------+-------------------------------------+------------+---------------+---------------------+---------------------+-------------------
+         4 | Juan David | Mart├¡nez Ruiz | juan.martinez@correo-ejemplo.edu.co | 3001000004 | 9780000000018 | Matilda             | 2026-10-25 10:00:00 | 2026-11-08
+         4 | Juan David | Mart├¡nez Ruiz | juan.martinez@correo-ejemplo.edu.co | 3001000004 | 9780000000028 | Orgullo y prejuicio | 2026-10-30 11:00:00 | 2026-11-13
+(2 rows)
+

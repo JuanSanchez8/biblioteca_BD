@@ -1,0 +1,10 @@
+﻿   tabla    | registros 
+------------+-----------
+ usuarios   |        21
+ libros     |        32
+ autor      |        29
+ categorias |         9
+ ejemplares |        94
+ prestamos  |        64
+(6 rows)
+
