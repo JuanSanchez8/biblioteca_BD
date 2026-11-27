@@ -1,0 +1,58 @@
+﻿BEGIN
+ set_config
+------------
+ 21
+(1 row)
+
+ set_config
+------------
+ 1
+(1 row)
+
+ set_config
+------------
+ 4
+(1 row)
+
+DO
+docker : psql:/scripts/pruebas-programacion.sql:67: NOTICE:  PRUEBA 1 OK: deteccion de mora
+En línea: 1 Carácter: 1
++ docker compose exec -T postgres psql -U curso -d curso -v ON_ERROR_ST ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (psql:/scripts/p...teccion de mora:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+
+psql:/scripts/pruebas-programacion.sql:110: NOTICE:  Prestamo registrado correctamente para el lector 1
+DO
+psql:/scripts/pruebas-programacion.sql:110: NOTICE:  PRUEBA 2 OK: prestamo valido
+psql:/scripts/pruebas-programacion.sql:151: NOTICE:  Devolucion registrada correctamente, sin retraso
+psql:/scripts/pruebas-programacion.sql:151: NOTICE:  PRUEBA 3 OK: devolucion valida
+DO
+DO
+psql:/scripts/pruebas-programacion.sql:182: NOTICE:  PRUEBA 4 OK: lector moroso rechazado
+psql:/scripts/pruebas-programacion.sql:212: NOTICE:  PRUEBA 5 OK: ejemplar ocupado rechazado
+DO
+DO
+psql:/scripts/pruebas-programacion.sql:239: NOTICE:  PRUEBA 6 OK: devolucion inexistente rechazada
+DO
+psql:/scripts/pruebas-programacion.sql:279: NOTICE:  PRUEBA 7 OK: trigger BEFORE protege INSERT
+DO
+psql:/scripts/pruebas-programacion.sql:310: NOTICE:  PRUEBA 8 OK: reapertura rechazada
+DO
+psql:/scripts/pruebas-programacion.sql:338: NOTICE:  PRUEBA 9 OK: estado inconsistente rechazado
+DO
+psql:/scripts/pruebas-programacion.sql:364: NOTICE:  PRUEBA 10 OK: mantenimiento permitido
+DO
+psql:/scripts/pruebas-programacion.sql:395: NOTICE:  PRUEBA 11 OK: identidad protegida
+DO
+ROLLBACK
+psql:/scripts/pruebas-programacion.sql:422: NOTICE:  PRUEBA 12 OK: consistencia global
+             resultado
+------------------------------------
+ 12 PRUEBAS SUPERADAS CORRECTAMENTE
+(1 row)
+
+ total_prestamos
+-----------------
+              64
+(1 row)
