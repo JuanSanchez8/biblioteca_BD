@@ -41,6 +41,33 @@ WHERE documento = '9000000001'
   AND rol = 'bibliotecario'
 \gset
 
+DO $$
+DECLARE
+    faltantes text;
+BEGIN
+    SELECT string_agg(r.documento, ', ' ORDER BY r.documento)
+    INTO faltantes
+    FROM (VALUES
+        ('1000000001'),
+        ('1000000002'),
+        ('1000000003'),
+        ('1000000004')
+    ) AS r(documento)
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM biblioteca.usuarios u
+        WHERE u.documento = r.documento
+          AND u.rol = 'lector'
+    );
+
+    IF faltantes IS NOT NULL THEN
+        RAISE EXCEPTION
+            'Faltan lectores requeridos para los datos de prueba (documentos: %). Cargue lectores_semilla.csv primero.',
+            faltantes;
+    END IF;
+END;
+$$;
+
 CREATE TABLE IF NOT EXISTS biblioteca.s16_control_prestamos_prueba (
     id_lector integer NOT NULL,
     isbn varchar NOT NULL,
@@ -74,8 +101,17 @@ WITH catalogo (isbn, cantidad) AS (
         ('9780000000032', 2), -- Harry Potter y la piedra filosofal
         ('9780000000006', 2)  -- La casa de los espíritus
 ),
-lectores (id_lector, dias_antes) AS (
-    VALUES (1, 100), (2, 70), (3, 40)
+lectores AS (
+    SELECT u.id_usuario AS id_lector, r.documento, r.dias_antes
+    FROM (VALUES
+        ('1000000001', 100),
+        ('1000000002', 70),
+        ('1000000003', 40),
+        ('1000000004', 30)
+    ) AS r(documento, dias_antes)
+    JOIN biblioteca.usuarios u
+      ON u.documento = r.documento
+     AND u.rol = 'lector'
 ),
 devueltos AS (
     SELECT
@@ -89,18 +125,23 @@ devueltos AS (
         (
             CURRENT_DATE - r.dias_antes
             + CASE
-                WHEN c.isbn = '9780000000014' AND r.id_lector = 1
+                WHEN c.isbn = '9780000000014'
+                     AND r.documento = '1000000001'
                     THEN 20 -- devolución seis días tarde
                 ELSE 10
               END
         )::date AS fecha_devolucion
     FROM catalogo c
     CROSS JOIN lectores r
-    WHERE c.cantidad = 3 OR r.id_lector IN (1, 2)
+    WHERE r.documento <> '1000000004'
+      AND (
+          c.cantidad = 3
+          OR r.documento IN ('1000000001', '1000000002')
+      )
 ),
 abiertos AS (
     SELECT
-        4 AS id_lector,
+        r.id_lector,
         '9780000000018'::varchar AS isbn,
         1 AS id_ejemplar,
         (CURRENT_DATE - 30)::timestamp + TIME '10:00'
@@ -108,29 +149,26 @@ abiertos AS (
         :id_bibliotecario AS id_bibliotecario,
         CURRENT_DATE - 16 AS fecha_vencimiento,
         NULL::date AS fecha_devolucion
+    FROM lectores r
+    WHERE r.documento = '1000000004'
     UNION ALL
     SELECT
-        4, '9780000000028'::varchar, 1,
+        r.id_lector, '9780000000028'::varchar, 1,
         (CURRENT_DATE - 25)::timestamp + TIME '11:00',
         :id_bibliotecario, CURRENT_DATE - 11, NULL::date
+    FROM lectores r
+    WHERE r.documento = '1000000004'
     UNION ALL
     SELECT
-        4, '9780000000027'::varchar, 1,
+        r.id_lector, '9780000000027'::varchar, 1,
         (CURRENT_DATE - 14)::timestamp + TIME '12:00',
         :id_bibliotecario, CURRENT_DATE, NULL::date
+    FROM lectores r
+    WHERE r.documento = '1000000004'
 )
 SELECT * FROM devueltos
 UNION ALL
 SELECT * FROM abiertos;
-
--- Liberar los ejemplares usados por el conjunto anterior, si existía.
-UPDATE biblioteca.ejemplares e
-SET estado = 'disponible'
-WHERE EXISTS (
-    SELECT 1
-    FROM biblioteca.s16_control_prestamos_prueba c
-    WHERE c.isbn = e.isbn AND c.id_ejemplar = e.id_ejemplar
-);
 
 -- Borrar solo préstamos cuyas claves están registradas por este script.
 DELETE FROM biblioteca.prestamos p
@@ -142,7 +180,15 @@ WHERE p.id_lector = c.id_lector
 
 DELETE FROM biblioteca.s16_control_prestamos_prueba;
 
--- No incluir las columnas de rol: PostgreSQL las genera automáticamente.
+-- Carga controlada de datos historicos de S16.
+-- Los prestamos vencidos son intencionales para probar
+-- los reportes de mora y vencimientos.
+-- Se desactiva exclusivamente el trigger de validacion
+-- de nuevos prestamos durante esta carga de prueba.
+
+ALTER TABLE biblioteca.prestamos
+DISABLE TRIGGER prestamo_validar;
+
 INSERT INTO biblioteca.prestamos (
     id_lector,
     isbn,
@@ -162,23 +208,15 @@ SELECT
     fecha_devolucion
 FROM s16_nuevos_prestamos;
 
+ALTER TABLE biblioteca.prestamos
+ENABLE TRIGGER prestamo_validar;
+
 -- Registrar las claves exactas para una ejecución repetible y segura.
 INSERT INTO biblioteca.s16_control_prestamos_prueba (
     id_lector, isbn, id_ejemplar, fecha_hora_prestamo
 )
 SELECT id_lector, isbn, id_ejemplar, fecha_hora_prestamo
 FROM s16_nuevos_prestamos;
-
--- Solo estos tres ejemplares quedan prestados al finalizar.
-UPDATE biblioteca.ejemplares e
-SET estado = 'prestado'
-WHERE EXISTS (
-    SELECT 1
-    FROM s16_nuevos_prestamos t
-    WHERE t.isbn = e.isbn
-      AND t.id_ejemplar = e.id_ejemplar
-      AND t.fecha_devolucion IS NULL
-);
 
 COMMIT;
 

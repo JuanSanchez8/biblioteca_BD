@@ -1,0 +1,10 @@
+﻿        trigger_name        | event_object_table | action_timing | event_manipulation
+----------------------------+--------------------+---------------+--------------------
+ ejemplar_validar_estado    | ejemplares         | BEFORE        | INSERT
+ ejemplar_validar_estado    | ejemplares         | BEFORE        | UPDATE
+ prestamo_actualizar_estado | prestamos          | AFTER         | DELETE
+ prestamo_actualizar_estado | prestamos          | AFTER         | INSERT
+ prestamo_actualizar_estado | prestamos          | AFTER         | UPDATE
+ prestamo_proteger          | prestamos          | BEFORE        | UPDATE
+ prestamo_validar           | prestamos          | BEFORE        | INSERT
+(7 rows)

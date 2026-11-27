@@ -1,0 +1,10 @@
+﻿        routine_name        | routine_type
+----------------------------+--------------
+ actualizar_estado_ejemplar | FUNCTION
+ lector_en_mora             | FUNCTION
+ proteger_prestamo          | FUNCTION
+ validar_estado_ejemplar    | FUNCTION
+ validar_prestamo           | FUNCTION
+ registrar_devolucion       | PROCEDURE
+ registrar_prestamo         | PROCEDURE
+(7 rows)
