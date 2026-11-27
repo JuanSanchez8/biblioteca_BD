@@ -182,11 +182,24 @@ docker compose exec postgres psql -U curso -d curso -P pager=off -f /tmp/S19-cas
 `casos.sql` incluye la evidencia, migraciones y verificaciones de los cuatro
 casos. La revisión del esquema Biblioteca está en `entregas\S19\parte-b.md`.
 
-## 6. Lógica en la base de datos — Hito 4 (S22)
+## 6. S22 (reservas, procedimientos y triggers)
+
+Con PostgreSQL en ejecución, preparar el esquema de reservas y luego ejecutar
+el SQL de la parte A:
+
+```
+docker compose exec postgres psql -U curso -d curso -f /scripts/S22-reservas.sql
+docker compose exec postgres psql -U curso -d curso -f /scripts/S22-grupo.sql
+```
+
+Las respuestas de la parte A están en
+[`entregas/S22/respuestas-parte-a.md`](entregas/S22/respuestas-parte-a.md).
+
+## 7. Lógica en la base de datos — Hito 4 (S22)
 
 La lógica de negocio del proyecto Biblioteca se implementa mediante funciones, procedimientos almacenados y triggers de PostgreSQL. Su propósito es centralizar las validaciones, garantizar la integridad de los préstamos y mantener la consistencia de los ejemplares independientemente de la aplicación que acceda a la base de datos.
 
-### 6.1. Objetos implementados
+### 7.1. Objetos implementados
 
 | Objeto | Tipo | Tabla / Evento | Regla o responsabilidad |
 |---|---|---|---|
@@ -202,7 +215,7 @@ La lógica de negocio del proyecto Biblioteca se implementa mediante funciones, 
 | `prestamo_proteger` | Trigger | `prestamos` — BEFORE UPDATE | Protege la identidad del préstamo e impide su reapertura. |
 | `ejemplar_validar_estado` | Trigger | `ejemplares` — BEFORE INSERT, UPDATE OF estado | Rechaza estados incompatibles con la existencia de préstamos abiertos. |
 
-### 6.2. Reglas de negocio implementadas
+### 7.2. Reglas de negocio implementadas
 
 - El lector y el bibliotecario deben existir, tener el rol correspondiente y estar activos para registrar un nuevo préstamo abierto.
 - El lector no debe tener préstamos en mora.
@@ -215,7 +228,7 @@ La lógica de negocio del proyecto Biblioteca se implementa mediante funciones, 
 - La identidad de un préstamo existente no puede modificarse.
 - El estado `prestado` de un ejemplar debe coincidir con la existencia de un préstamo abierto.
 
-### 6.3. Justificación de los mecanismos utilizados
+### 7.3. Justificación de los mecanismos utilizados
 
 Los procedimientos almacenados permiten encapsular operaciones completas del negocio, como registrar un préstamo o una devolución. Esto evita repetir la lógica en diferentes aplicaciones y facilita su ejecución mediante la instrucción `CALL`.
 
@@ -223,7 +236,7 @@ Los triggers permiten ejecutar validaciones y actualizaciones automáticamente c
 
 La función `lector_en_mora` centraliza el criterio utilizado para determinar si un lector tiene préstamos vencidos y permite reutilizarlo en las validaciones.
 
-### 6.4. Mantenimiento de la desnormalización del Hito 3
+### 7.4. Mantenimiento de la desnormalización del Hito 3
 
 En el Hito 3 se identificó que el estado `prestado` de un ejemplar puede derivarse de la existencia de un préstamo abierto. Sin embargo, se decidió conservar el atributo `estado` en la tabla `ejemplares` para facilitar las consultas de disponibilidad.
 
@@ -253,7 +266,7 @@ IS DISTINCT FROM EXISTS (
 
 El resultado esperado es cero filas.
 
-### 6.5. Instalación de la programación
+### 7.5. Instalación de la programación
 
 Desde la raíz del proyecto, con PostgreSQL en ejecución:
 
@@ -265,7 +278,7 @@ El archivo utiliza `CREATE OR REPLACE` para las funciones y procedimientos, y `D
 
 Una copia idéntica se encuentra en `postgres/init/03_programacion.sql`, lo que permite instalar automáticamente la programación al inicializar un volumen vacío.
 
-### 6.6. Carga de datos y ejecución de pruebas
+### 7.6. Carga de datos y ejecución de pruebas
 
 Para una base recién inicializada, primero se deben cargar los lectores y libros semilla:
 
@@ -295,7 +308,7 @@ docker compose exec -T postgres psql -U curso -d curso -v ON_ERROR_STOP=1 -f /sc
 
 Las pruebas se ejecutan dentro de una transacción que finaliza con `ROLLBACK`, conservando los datos originales.
 
-### 6.7. Casos de prueba
+### 7.7. Casos de prueba
 
 | N.º | Caso de prueba | Resultado |
 |---|---|---|
@@ -312,7 +325,7 @@ Las pruebas se ejecutan dentro de una transacción que finaliza con `ROLLBACK`, 
 | 11 | Protección de la identidad del préstamo | Correcto |
 | 12 | Verificación de consistencia global | Correcto |
 
-### 6.8. Verificación de inicialización independiente
+### 7.8. Verificación de inicialización independiente
 
 Se creó una base de datos temporal denominada `prueba_init` para verificar que la programación pudiera instalarse desde cero sin afectar la base de datos principal.
 
@@ -332,7 +345,7 @@ También se comprobó el funcionamiento con identificadores de usuarios diferent
 
 Después de guardar las evidencias, se eliminó la base temporal y se verificó que la base principal conservara sus 64 préstamos.
 
-### 6.9. Evidencias
+### 7.9. Evidencias
 
 Las evidencias de ejecución se encuentran en `entregas/S22/evidencias/`:
 
@@ -342,7 +355,7 @@ Las evidencias de ejecución se encuentran en `entregas/S22/evidencias/`:
 - [Triggers implementados](entregas/S22/evidencias/triggers.txt).
 - [Consistencia de ejemplares](entregas/S22/evidencias/consistencia-ejemplares.txt).
 
-### 6.10. Alcance y limitaciones
+### 7.10. Alcance y limitaciones
 
 Las pruebas realizadas verifican el comportamiento funcional de los procedimientos, las funciones y los triggers. No constituyen pruebas exhaustivas de concurrencia.
 
@@ -350,7 +363,7 @@ La implementación no establece un límite máximo de préstamos simultáneos po
 
 La desactivación temporal del trigger de validación se utiliza únicamente para generar los datos históricos de prueba.
 
-### 6.11. Conclusión
+### 7.11. Conclusión
 
 La implementación del Hito 4 permite trasladar operaciones y validaciones importantes del sistema Biblioteca a la base de datos. Los procedimientos almacenados centralizan el registro de préstamos y devoluciones, mientras que los triggers mantienen la integridad y la consistencia de los ejemplares.
 
